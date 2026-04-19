@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Joserana — Control de Compras</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', -apple-system, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+:root {
+  --azul: #1a1a2e; --azul2: #16213e; --acento: #e94560;
+  --verde: #0f9b58; --amarillo: #f5a623;
+  --bg: #f0f2f5; --card: #ffffff; --border: #e2e6ea;
+  --text: #1a1a2e; --muted: #7a8499;
+}
+
+/* HEADER */
+.header { background: var(--azul); color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.header h1 { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+.header h1 span { color: var(--acento); }
+.header-sub { font-size: 11px; opacity: .5; margin-top: 1px; }
+.sync { font-size: 12px; }
+.sync.ok { color: #6ee7b7; }
+.sync.err { color: #fca5a5; }
+
+/* NAV */
+.nav { display: flex; background: var(--azul2); border-bottom: 2px solid var(--acento); overflow-x: auto; }
+.nav button { padding: 12px 14px; border: none; background: transparent; font-size: 12px; font-weight: 500; color: rgba(255,255,255,.5); cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .2s; }
+.nav button.active { color: white; border-bottom-color: var(--acento); }
+.nav button:hover { color: rgba(255,255,255,.8); }
+
+.content { padding: 16px; max-width: 1000px; margin: 0 auto; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* CARDS */
+.card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 14px; border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.card h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+
+/* STATS */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat { background: var(--card); border-radius: 10px; padding: 14px; border: 1px solid var(--border); }
+.stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--azul); }
+.stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stat.verde .stat-value { color: var(--verde); }
+.stat.rojo .stat-value { color: var(--acento); }
+.stat.amarillo .stat-value { color: var(--amarillo); }
+
+/* FORMS */
+.fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fg3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.fl { display: flex; flex-direction: column; gap: 4px; }
+label { font-size: 12px; color: var(--muted); font-weight: 500; }
+input, select, textarea { font-size: 14px; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: white; color: var(--text); width: 100%; -webkit-appearance: none; transition: border-color .2s; }
+input:focus, select:focus { outline: none; border-color: var(--acento); }
+input[type=number] { text-align: right; }
+
+/* BOTONES */
+.btn-primary { background: var(--acento); color: white; border: none; padding: 11px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+.btn-primary:hover { opacity: .85; }
+.btn-primary:disabled { opacity: .4; }
+.btn-sec { background: white; color: var(--text); border: 1px solid var(--border); padding: 9px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+.btn-verde { background: var(--verde); color: white; border: none; padding: 9px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+.btn-sm { font-size: 12px; padding: 5px 12px; background: white; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.btn-danger { font-size: 12px; padding: 5px 10px; background: white; border: 1px solid #fca5a5; color: var(--acento); border-radius: 6px; cursor: pointer; }
+.btn-full { width: 100%; }
+
+/* FACTURAS */
+.factura-item { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.factura-hdr { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #fafbfc; }
+.factura-hdr:hover { background: #f0f2f5; }
+.factura-proveedor { font-size: 14px; font-weight: 700; color: var(--azul); }
+.factura-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.factura-total { font-size: 16px; font-weight: 700; color: var(--acento); }
+.factura-body { display: none; border-top: 1px solid var(--border); padding: 12px 16px; }
+.factura-body.open { display: block; }
+.factura-linea { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+.factura-linea:last-child { border-bottom: none; }
+.linea-prod { font-weight: 500; flex: 1; }
+.linea-det { color: var(--muted); font-size: 11px; margin-top: 1px; }
+.linea-total { font-weight: 600; white-space: nowrap; margin-left: 12px; }
+
+/* LINEAS FACTURA EN FORMULARIO */
+.lineas-container { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.linea-row { display: grid; grid-template-columns: 1fr 90px 90px 80px 32px; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #f5f5f5; background: white; }
+.linea-row:last-child { border-bottom: none; }
+.linea-row input, .linea-row select { font-size: 13px; padding: 6px 8px; }
+.lineas-header { display: grid; grid-template-columns: 1fr 90px 90px 80px 32px; gap: 6px; padding: 6px 10px; background: var(--azul); color: rgba(255,255,255,.7); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.btn-del-linea { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #fca5a5; background: white; color: var(--acento); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.linea-subtotal { font-size: 12px; font-weight: 600; color: var(--verde); text-align: right; }
+
+/* TOTAL BAR */
+.total-bar { background: var(--azul); border-radius: 10px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.total-bar span { font-size: 13px; color: rgba(255,255,255,.6); }
+.total-bar strong { font-size: 22px; color: white; font-weight: 700; }
+
+/* TABLA */
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 600px; }
+th { text-align: left; padding: 9px 10px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; white-space: nowrap; background: #fafbfc; }
+td { padding: 9px 10px; border-bottom: 1px solid #f5f5f5; white-space: nowrap; }
+tr:hover td { background: #f8f9fa; }
+
+/* BADGE */
+.badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-grua1 { background: #dbeafe; color: #1d4ed8; }
+.badge-grua2 { background: #fce7f3; color: #9d174d; }
+.badge-ambas { background: #d1fae5; color: #065f46; }
+
+/* CHIPS */
+.chips { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.chip { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--muted); background: white; white-space: nowrap; }
+.chip.active { background: var(--azul); color: white; border-color: var(--azul); }
+
+/* SEARCH */
+.search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.search-row input { flex: 1; }
+
+/* BAR CHART */
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bar-label { width: 160px; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.bar-track { flex: 1; background: #f0f2f5; border-radius: 4px; height: 20px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--acento); border-radius: 4px; opacity: .8; }
+.bar-fill.verde { background: var(--verde); }
+.bar-val { min-width: 80px; text-align: right; font-size: 12px; font-weight: 600; }
+
+/* MODAL */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.show { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 20px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--azul); }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.modal-actions button { flex: 1; }
+
+/* CATÁLOGO */
+.cat-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+.cat-item:last-child { border-bottom: none; }
+.cat-nombre { font-weight: 500; flex: 1; }
+.cat-cat { font-size: 11px; color: var(--muted); }
+
+/* TOAST */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--azul); color: white; padding: 12px 20px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .3s; z-index: 300; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; }
+
+/* SEPARADOR SECCIÓN */
+.sec-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
+/* MES SELECTOR */
+.mes-selector { display: flex; align-items: center; gap: 10px; background: white; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; }
+.mes-selector select { border: none; font-size: 14px; font-weight: 600; color: var(--azul); background: transparent; width: auto; }
+.mes-selector select:focus { outline: none; }
+
+@media (max-width: 600px) {
+  .fg2 { grid-template-columns: 1fr; }
+  .fg3 { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .linea-row { grid-template-columns: 1fr 80px 80px 70px 28px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div><h1>Jose<span>rana</span></h1><div class="header-sub">Control de compras y facturas</div></div>
+  <span class="sync" id="sync-status">Conectando...</span>
+</div>
+
+<nav class="nav">
+  <button class="active" onclick="go('panel')">📊 Panel</button>
+  <button onclick="go('nueva-factura')">➕ Nueva factura</button>
+  <button onclick="go('facturas')">🧾 Facturas</button>
+  <button onclick="go('informe')">📈 Informe</button>
+  <button onclick="go('catalogo')">📦 Catálogo</button>
+  <button onclick="go('config')">⚙️ Config</button>
+</nav>
+
+<div class="content">
+
+<!-- PANEL -->
+<div id="v-panel" class="view active">
+  <div class="mes-selector">
+    <span style="font-size:13px;color:var(--muted)">Mostrando:</span>
+    <select id="panel-mes" onchange="rPanel()"></select>
+    <span style="font-size:13px;color:var(--muted);margin-left:auto">Grúa:</span>
+    <select id="panel-grua" onchange="rPanel()" style="border:none;font-size:13px;color:var(--azul);background:transparent;width:auto">
+      <option value="">Ambas</option>
+      <option value="Grúa 1">Grúa 1</option>
+      <option value="Grúa 2">Grúa 2</option>
+    </select>
+  </div>
+  <div class="stats" id="panel-stats"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="card"><h3>Top proveedores (gasto)</h3><div id="panel-proveedores"></div></div>
+    <div class="card"><h3>Últimas facturas</h3><div id="panel-ultimas"></div></div>
+  </div>
+  <div class="card"><h3>Top productos comprados</h3><div id="panel-productos"></div></div>
+</div>
+
+<!-- NUEVA FACTURA -->
+<div id="v-nueva-factura" class="view">
+
+  <!-- LECTOR IA -->
+  <div class="card" id="card-lector">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="width:36px;height:36px;background:var(--acento);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🤖</div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--azul)">Leer factura con IA</div>
+        <div style="font-size:12px;color:var(--muted)">Subí una foto o PDF y la IA extrae los datos automáticamente</div>
+      </div>
+    </div>
+    <div id="zona-upload" onclick="document.getElementById('input-factura').click()"
+      style="border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;background:#fafbfc">
+      <div style="font-size:32px;margin-bottom:8px">📎</div>
+      <div style="font-size:14px;font-weight:600;color:var(--azul)">Tocá para subir foto o PDF</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">JPG, PNG, PDF — desde galería, cámara o archivos</div>
+      <input type="file" id="input-factura" accept="image/*,application/pdf" style="display:none" onchange="leerFacturaIA(this)">
+    </div>
+    <div id="ia-preview" style="display:none;margin-top:12px">
+      <img id="ia-img" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border);display:none">
+      <div id="ia-pdf-info" style="display:none;background:#f0f2f5;border-radius:8px;padding:10px 14px;font-size:13px;color:var(--muted)">📄 PDF cargado</div>
+    </div>
+    <div id="ia-status" style="display:none;margin-top:12px">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;font-size:13px;color:#15803d;display:flex;align-items:center;gap:8px">
+        <span id="ia-spinner">⏳</span>
+        <span id="ia-status-txt">Analizando factura...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Datos de la factura</h3>
+    <div class="fg3">
+      <div class="fl"><label>Fecha</label><input type="date" id="f-fecha"></div>
+      <div class="fl"><label>Proveedor</label>
+        <input type="text" id="f-proveedor" placeholder="Ej: Coca-Cola, Distribuidora..." list="prov-list" autocomplete="off">
+        <datalist id="prov-list"></datalist>
+      </div>
+      <div class="fl"><label>N° Factura / Boleta</label><input type="text" id="f-numero" placeholder="Ej: 004521"></div>
+      <div class="fl"><label>Grúa destino</label>
+        <select id="f-grua">
+          <option value="Grúa 1">Grúa 1</option>
+          <option value="Grúa 2">Grúa 2</option>
+          <option value="Ambas">Ambas grúas</option>
+        </select>
+      </div>
+      <div class="fl"><label>Forma de pago</label>
+        <select id="f-mpago">
+          <option value="CONTADO">Contado</option>
+          <option value="CREDITO">Crédito</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">Productos de la factura</h3>
+      <button class="btn-verde" onclick="agregarLinea()">+ Agregar línea</button>
+    </div>
+    <div class="lineas-container">
+      <div class="lineas-header">
+        <div>Producto</div><div>Cantidad</div><div>Precio unit.</div><div>Subtotal</div><div></div>
+      </div>
+      <div id="lineas-body"></div>
+    </div>
+    <div class="total-bar">
+      <div><span>Total factura</span><div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px" id="f-det">Sin productos</div></div>
+      <strong id="f-total">$0</strong>
+    </div>
+    <button class="btn-primary btn-full" style="margin-top:14px" onclick="guardarFactura()">Guardar factura</button>
+  </div>
+</div>
+
+<!-- FACTURAS -->
+<div id="v-facturas" class="view">
+  <div class="search-row">
+    <input type="text" id="busq-facturas" placeholder="Buscar proveedor, número, producto..." oninput="renderFacturas()">
+    <select id="filtro-grua-f" onchange="renderFacturas()" style="width:auto;min-width:120px">
+      <option value="">Todas las grúas</option>
+      <option value="Grúa 1">Grúa 1</option>
+      <option value="Grúa 2">Grúa 2</option>
+    </select>
+  </div>
+  <div class="chips" id="chips-mes-f"></div>
+  <div id="facturas-lista"></div>
+</div>
+
+<!-- INFORME -->
+<div id="v-informe" class="view">
+  <div class="mes-selector">
+    <span style="font-size:13px;color:var(--muted)">Mes:</span>
+    <select id="inf-mes" onchange="rInforme()"></select>
+    <span style="font-size:13px;color:var(--muted);margin-left:auto">Grúa:</span>
+    <select id="inf-grua" onchange="rInforme()" style="border:none;font-size:13px;color:var(--azul);background:transparent;width:auto">
+      <option value="">Ambas</option>
+      <option value="Grúa 1">Grúa 1</option>
+      <option value="Grúa 2">Grúa 2</option>
+    </select>
+    <button class="btn-sec" style="margin-left:8px;font-size:12px" onclick="exportCSV()">⬇ CSV</button>
+  </div>
+  <div class="stats" id="inf-stats"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+    <div class="card"><h3>Gasto por proveedor</h3><div id="inf-prov"></div></div>
+    <div class="card"><h3>Gasto por categoría</h3><div id="inf-cat"></div></div>
+  </div>
+  <div class="card">
+    <h3>Detalle por producto</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Producto</th><th>Categoría</th><th>Unidades</th><th>Gasto total</th><th>P. unit. prom.</th></tr></thead>
+        <tbody id="inf-tabla"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CATÁLOGO -->
+<div id="v-catalogo" class="view">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:15px;font-weight:700">Productos del catálogo</div>
+    <button class="btn-primary" onclick="abrirModalProducto()">+ Nuevo producto</button>
+  </div>
+  <div class="search-row">
+    <input type="text" id="busq-cat" placeholder="Buscar producto..." oninput="renderCatalogo()">
+    <select id="filtro-cat" onchange="renderCatalogo()" style="width:auto;min-width:130px">
+      <option value="">Todas las categorías</option>
+    </select>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="tw">
+      <table>
+        <thead><tr><th>Producto</th><th>Categoría</th><th>Precio costo ref.</th><th>Precio venta ref.</th><th>Acciones</th></tr></thead>
+        <tbody id="cat-tabla"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG -->
+<div id="v-config" class="view">
+  <div class="card">
+    <h3>🤖 Gemini IA — Lectura de facturas</h3>
+    <div class="fl" style="margin-bottom:10px">
+      <label>API Key de Gemini (gratuita)</label>
+      <input type="password" id="cfg-gemini" placeholder="AIzaSy...">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Obtenida en aistudio.google.com · Se guarda solo en tu navegador</div>
+    </div>
+    <div id="cfg-gemini-estado" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+    <button class="btn-verde" onclick="guardarGeminiKey()">Guardar clave Gemini</button>
+  </div>
+  <div class="card">
+    <h3>Conexión Google Sheets</h3>
+    <div class="fl" style="margin-bottom:10px">
+      <label>URL del Apps Script</label>
+      <input type="text" id="cfg-url" placeholder="https://script.google.com/macros/s/...">
+    </div>
+    <div id="cfg-estado" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+    <button class="btn-primary" onclick="guardarConfig()">Guardar y conectar</button>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- MODAL PRODUCTO -->
+<div class="modal-overlay" id="modal-producto">
+  <div class="modal">
+    <h3 id="modal-prod-titulo">Nuevo producto</h3>
+    <div class="fg2" style="margin-bottom:10px">
+      <div class="fl"><label>Nombre del producto</label><input type="text" id="prod-nombre" placeholder="Ej: Coca-Cola Lata"></div>
+      <div class="fl"><label>Categoría</label>
+        <input type="text" id="prod-cat" placeholder="Ej: Bebidas, Snacks, Comida..." list="cat-list">
+        <datalist id="cat-list"></datalist>
+      </div>
+      <div class="fl"><label>Precio costo referencia</label><input type="number" id="prod-costo" placeholder="0"></div>
+      <div class="fl"><label>Precio venta referencia</label><input type="number" id="prod-venta" placeholder="0"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="guardarProducto()">Guardar</button>
+      <button class="btn-sec" onclick="cerrarModalProducto()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+var SCRIPT_URL = localStorage.getItem('jr_url') || '';
+var facturas = JSON.parse(localStorage.getItem('jr_facturas') || '[]');
+var catalogo = JSON.parse(localStorage.getItem('jr_catalogo') || '[]');
+var lineaCount = 0;
+var editProdIdx = null;
+var mesFiltroF = '';
+
+// Catálogo inicial desde el Excel
+if (!catalogo.length) {
+  catalogo = [
+    {nombre:'COCA-COLA LATA',cat:'Bebidas - Latas',costo:800,venta:1300},
+    {nombre:'COCA-COLA 0 LATA',cat:'Bebidas - Latas',costo:800,venta:1300},
+    {nombre:'PEPSI LATA',cat:'Bebidas - Latas',costo:649,venta:1300},
+    {nombre:'BILZ LATA',cat:'Bebidas - Latas',costo:649,venta:1300},
+    {nombre:'SPRITE LATA',cat:'Bebidas - Latas',costo:800,venta:1300},
+    {nombre:'FANTA LATA',cat:'Bebidas - Latas',costo:800,venta:1300},
+    {nombre:'KEM PIÑA LATA',cat:'Bebidas - Latas',costo:649,venta:1300},
+    {nombre:'CRUSH ORANGE LATA',cat:'Bebidas - Latas',costo:649,venta:1300},
+    {nombre:'MONSTER',cat:'Energéticas',costo:1459,venta:2200},
+    {nombre:'MONSTER RIPER',cat:'Energéticas',costo:1459,venta:2200},
+    {nombre:'MONSTER ULTRA',cat:'Energéticas',costo:1459,venta:2200},
+    {nombre:'RED BULL',cat:'Energéticas',costo:1188,venta:1800},
+    {nombre:'SCORE GORILLA',cat:'Energéticas',costo:872,venta:1300},
+    {nombre:'SCORE NORMAL',cat:'Energéticas',costo:872,venta:1300},
+    {nombre:'COCA-COLA 500ML',cat:'Bebidas - Medio litro',costo:958,venta:1500},
+    {nombre:'PEPSI 500ML',cat:'Bebidas - Medio litro',costo:901,venta:1500},
+    {nombre:'BILZ 500ML',cat:'Bebidas - Medio litro',costo:901,venta:1500},
+    {nombre:'SPRITE 500ML',cat:'Bebidas - Medio litro',costo:958,venta:1500},
+    {nombre:'FANTA 500ML',cat:'Bebidas - Medio litro',costo:958,venta:1500},
+    {nombre:'GATORADE ROJO',cat:'Bebidas - Medio litro',costo:1340,venta:2000},
+    {nombre:'GATORADE AZUL',cat:'Bebidas - Medio litro',costo:1340,venta:2000},
+    {nombre:'AGUA CON GAS',cat:'Aguas',costo:474,venta:1000},
+    {nombre:'AGUA SIN GAS',cat:'Aguas',costo:474,venta:1000},
+    {nombre:'COCA-COLA 1.5L',cat:'Bebidas - Litro y medio',costo:1734,venta:2500},
+    {nombre:'PAP 1.5L',cat:'Bebidas - Litro y medio',costo:1635,venta:2500},
+    {nombre:'BILZ 1.5L',cat:'Bebidas - Litro y medio',costo:1635,venta:2500},
+    {nombre:'EMPANADA PINO',cat:'Comida',costo:1850,venta:3000},
+    {nombre:'EMPANADA POLLO',cat:'Comida',costo:1750,venta:3000},
+    {nombre:'EMPANADA MECHADA',cat:'Comida',costo:1790,venta:3000},
+    {nombre:'EMPANADA CHOCLO',cat:'Comida',costo:1850,venta:3000},
+    {nombre:'EMPANADA NAPOLITANA',cat:'Comida',costo:1980,venta:3000},
+    {nombre:'EMPANADA CHAMPIÑON',cat:'Comida',costo:1980,venta:3000},
+    {nombre:'CHAPARRITA',cat:'Comida',costo:1510,venta:2500},
+    {nombre:'PIZZA',cat:'Comida',costo:1000,venta:2000},
+    {nombre:'HAMBURGUESA',cat:'Comida',costo:1600,venta:2800},
+    {nombre:'ALIADOS',cat:'Comida',costo:950,venta:1700},
+    {nombre:'GALLETA LIMON',cat:'Galletas',costo:780,venta:1300},
+    {nombre:'GALLETA TRITON',cat:'Galletas',costo:650,venta:1200},
+    {nombre:'GALLETA OREO',cat:'Galletas',costo:620,venta:1000},
+    {nombre:'GALLETA NIK',cat:'Galletas',costo:550,venta:1000},
+    {nombre:'GALLETA CHOCO CHIPS',cat:'Galletas',costo:850,venta:1400},
+    {nombre:'SUPER 8',cat:'Dulces',costo:220,venta:500},
+    {nombre:'BON O BON',cat:'Dulces',costo:300,venta:400},
+    {nombre:'CHOCMAN',cat:'Dulces',costo:155,venta:400},
+    {nombre:'GOLPE',cat:'Dulces',costo:163,venta:400},
+    {nombre:'CAPRI 30G',cat:'Dulces',costo:315,venta:600},
+    {nombre:'SAHNE-NUSS 14G',cat:'Dulces',costo:330,venta:600},
+    {nombre:'PAPAS',cat:'Snacks',costo:900,venta:1100},
+    {nombre:'DORITOS',cat:'Snacks',costo:900,venta:1100},
+    {nombre:'PANCHITO',cat:'Snacks',costo:800,venta:1000},
+    {nombre:'BIGTIME',cat:'Snacks',costo:400,venta:500},
+    {nombre:'ROCKLETS',cat:'Dulces',costo:600,venta:800},
+    {nombre:'MALTA',cat:'Otros',costo:1500,venta:1800},
+    {nombre:'JUMEX',cat:'Otros',costo:900,venta:1200},
+    {nombre:'PAPEL HIGIENICO',cat:'Otros',costo:500,venta:600},
+    {nombre:'ENCENDEDOR',cat:'Otros',costo:400,venta:500},
+  ];
+  localStorage.setItem('jr_catalogo', JSON.stringify(catalogo));
+}
+
+function fmt(n) { return '$' + Math.round(n||0).toLocaleString('es-CL'); }
+function hoy() { return new Date().toISOString().slice(0,10); }
+function fmtF(v) {
+  if (!v) return '—';
+  if (typeof v === 'string' && v.includes('-')) { var p=v.split('-'); return p[2].slice(0,2)+'/'+p[1]+'/'+p[0]; }
+  return v;
+}
+function mesKey(fecha) { return fecha ? fecha.slice(0,7) : ''; }
+function mesLabel(k) {
+  if (!k) return '';
+  var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var p=k.split('-'); return meses[parseInt(p[1])-1]+' '+p[0];
+}
+function showToast(m) { var t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},2500); }
+function setSyncStatus(m,t) { var el=document.getElementById('sync-status'); el.textContent=m; el.className='sync'+(t?' '+t:''); }
+
+function getMeses() {
+  var meses=[...new Set(facturas.map(function(f){return mesKey(f.fecha);}).filter(Boolean))].sort().reverse();
+  return meses;
+}
+
+function getMesActual() {
+  var meses=getMeses();
+  return meses.length ? meses[0] : hoy().slice(0,7);
+}
+
+function poblarSelectMes(id, val) {
+  var sel=document.getElementById(id); if(!sel) return;
+  var meses=getMeses();
+  var actual=hoy().slice(0,7);
+  if(meses.indexOf(actual)===-1) meses.unshift(actual);
+  sel.innerHTML=meses.map(function(m){ return '<option value="'+m+'"'+(m===val?' selected':'')+'>'+mesLabel(m)+'</option>'; }).join('');
+}
+
+function go(v) {
+  document.querySelectorAll('.view').forEach(function(e){e.classList.remove('active');});
+  document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active');});
+  document.getElementById('v-'+v).classList.add('active');
+  var map={'panel':0,'nueva-factura':1,'facturas':2,'informe':3,'catalogo':4,'config':5};
+  document.querySelectorAll('.nav button')[map[v]].classList.add('active');
+  if(v==='panel') rPanel();
+  if(v==='facturas') renderFacturas();
+  if(v==='informe') { poblarSelectMes('inf-mes', getMesActual()); rInforme(); }
+  if(v==='catalogo') renderCatalogo();
+  if(v==='config') rConfig();
+}
+
+// ---- LINEAS FACTURA ----
+function agregarLinea() {
+  var id='linea-'+lineaCount++;
+  var opts=catalogo.map(function(p){return '<option value="'+p.nombre+'">'+p.nombre+'</option>';}).join('');
+  var html='<div class="linea-row" id="'+id+'">'+
+    '<div><input type="text" list="cat-prod-list" placeholder="Producto..." oninput="actualizarLinea(\''+id+'\')" style="width:100%"></div>'+
+    '<div><input type="number" placeholder="0" min="0" oninput="calcLinea(\''+id+'\')" style="width:100%"></div>'+
+    '<div><input type="number" placeholder="$0" min="0" oninput="calcLinea(\''+id+'\')" style="width:100%"></div>'+
+    '<div class="linea-subtotal" id="sub-'+id+'">$0</div>'+
+    '<button class="btn-del-linea" onclick="eliminarLinea(\''+id+'\')">×</button>'+
+    '</div>';
+  document.getElementById('lineas-body').insertAdjacentHTML('beforeend', html);
+  actualizarDatalist();
+  calcTotal();
+}
+
+function actualizarDatalist() {
+  var dl=document.getElementById('cat-prod-list');
+  if(!dl) {
+    dl=document.createElement('datalist'); dl.id='cat-prod-list';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML=catalogo.map(function(p){return '<option value="'+p.nombre+'">';}).join('');
+}
+
+function actualizarLinea(id) {
+  var row=document.getElementById(id); if(!row) return;
+  var nombre=row.querySelector('input[type=text]').value.toUpperCase();
+  var prod=catalogo.find(function(p){return p.nombre===nombre;});
+  if(prod) {
+    var inputs=row.querySelectorAll('input[type=number]');
+    if(!inputs[1].value) inputs[1].value=prod.costo;
+    calcLinea(id);
+  }
+}
+
+function calcLinea(id) {
+  var row=document.getElementById(id); if(!row) return;
+  var inputs=row.querySelectorAll('input[type=number]');
+  var qty=parseFloat(inputs[0].value)||0;
+  var precio=parseFloat(inputs[1].value)||0;
+  document.getElementById('sub-'+id).textContent=fmt(qty*precio);
+  calcTotal();
+}
+
+function eliminarLinea(id) {
+  var el=document.getElementById(id); if(el) el.remove();
+  calcTotal();
+}
+
+function calcTotal() {
+  var rows=document.querySelectorAll('#lineas-body .linea-row');
+  var total=0; var items=[];
+  rows.forEach(function(row){
+    var nombre=row.querySelector('input[type=text]').value;
+    var inputs=row.querySelectorAll('input[type=number]');
+    var qty=parseFloat(inputs[0].value)||0;
+    var precio=parseFloat(inputs[1].value)||0;
+    total+=qty*precio;
+    if(nombre&&qty) items.push(nombre.split(' ')[0]+'x'+qty);
+  });
+  document.getElementById('f-total').textContent=fmt(total);
+  document.getElementById('f-det').textContent=items.join(' · ')||'Sin productos';
+}
+
+function getLineas() {
+  var rows=document.querySelectorAll('#lineas-body .linea-row');
+  var lineas=[];
+  rows.forEach(function(row){
+    var nombre=row.querySelector('input[type=text]').value.trim().toUpperCase();
+    var inputs=row.querySelectorAll('input[type=number]');
+    var qty=parseFloat(inputs[0].value)||0;
+    var precio=parseFloat(inputs[1].value)||0;
+    if(nombre&&qty&&precio) lineas.push({producto:nombre,cantidad:qty,precio:precio,subtotal:qty*precio});
+  });
+  return lineas;
+}
+
+// ---- GUARDAR FACTURA ----
+function guardarFactura() {
+  var proveedor=document.getElementById('f-proveedor').value.trim().toUpperCase();
+  if(!proveedor){showToast('Ingresá el proveedor');return;}
+  var lineas=getLineas();
+  if(!lineas.length){showToast('Agregá al menos un producto');return;}
+  var total=lineas.reduce(function(s,l){return s+l.subtotal;},0);
+  var f={
+    id:Date.now(),
+    fecha:document.getElementById('f-fecha').value||hoy(),
+    proveedor:proveedor,
+    numero:document.getElementById('f-numero').value||'',
+    grua:document.getElementById('f-grua').value,
+    mpago:document.getElementById('f-mpago').value,
+    lineas:lineas, total:total
+  };
+  facturas.push(f);
+  localStorage.setItem('jr_facturas',JSON.stringify(facturas));
+  // Limpiar form
+  document.getElementById('f-proveedor').value='';
+  document.getElementById('f-numero').value='';
+  document.getElementById('lineas-body').innerHTML='';
+  calcTotal();
+  showToast('✅ Factura guardada');
+  // Sincronizar si hay URL
+  if(SCRIPT_URL) sincFactura(f);
+  go('facturas');
+}
+
+function sincFactura(f) {
+  setSyncStatus('Sincronizando...');
+  var url=SCRIPT_URL+'?action=addFactura&data='+encodeURIComponent(JSON.stringify(f));
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res.ok) setSyncStatus('Sincronizado '+new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}),'ok');
+    else setSyncStatus('Error Sheet','err');
+  }).catch(function(){setSyncStatus('Sin conexión','err');});
+}
+
+// ---- RENDER FACTURAS ----
+function renderFacturas() {
+  var q=(document.getElementById('busq-facturas').value||'').toLowerCase();
+  var gf=document.getElementById('filtro-grua-f').value;
+  var ff=mesFiltroF;
+  var f=facturas.filter(function(fc){
+    var mq=!q||fc.proveedor.toLowerCase().includes(q)||(fc.numero||'').includes(q)||fc.lineas.some(function(l){return l.producto.toLowerCase().includes(q);});
+    var mg=!gf||fc.grua===gf;
+    var mf=!ff||mesKey(fc.fecha)===ff;
+    return mq&&mg&&mf;
+  });
+  // Chips de mes
+  var meses=getMeses();
+  document.getElementById('chips-mes-f').innerHTML=
+    '<button class="chip'+(mesFiltroF===''?' active':'')+'" onclick="setMesFiltroF(\'\',this)">Todos</button>'+
+    meses.map(function(m){return '<button class="chip'+(mesFiltroF===m?' active':'')+'" onclick="setMesFiltroF(\''+m+'\',this)">'+mesLabel(m)+'</button>';}).join('');
+  var cont=document.getElementById('facturas-lista');
+  if(!f.length){cont.innerHTML='<div class="card" style="color:var(--muted);font-size:13px;text-align:center;padding:2rem">Sin facturas</div>';return;}
+  cont.innerHTML=f.slice().reverse().map(function(fc){
+    var bid='fc-'+fc.id;
+    return '<div class="factura-item">'+
+      '<div class="factura-hdr" onclick="toggleFc(\''+bid+'\')">'+
+        '<div><div class="factura-proveedor">'+fc.proveedor+'</div>'+
+        '<div class="factura-meta">'+fmtF(fc.fecha)+' · '+(fc.numero?'N°'+fc.numero+' · ':'')+
+        '<span class="badge badge-'+(fc.grua==='Grúa 1'?'grua1':fc.grua==='Grúa 2'?'grua2':'ambas')+'">'+fc.grua+'</span>'+
+        ' · '+fc.mpago+'</div></div>'+
+        '<div style="display:flex;align-items:center;gap:12px">'+
+        '<div class="factura-total">'+fmt(fc.total)+'</div>'+
+        '<button class="btn-danger" onclick="event.stopPropagation();eliminarFactura('+fc.id+')">🗑</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="factura-body" id="'+bid+'">'+
+        fc.lineas.map(function(l){
+          return '<div class="factura-linea">'+
+            '<div><div class="linea-prod">'+l.producto+'</div>'+
+            '<div class="linea-det">'+l.cantidad+' u. × '+fmt(l.precio)+'</div></div>'+
+            '<div class="linea-total">'+fmt(l.subtotal)+'</div>'+
+          '</div>';
+        }).join('')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function setMesFiltroF(m, el) {
+  mesFiltroF=m;
+  renderFacturas();
+}
+
+function toggleFc(id) {
+  var el=document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+
+function eliminarFactura(id) {
+  if(!confirm('¿Eliminar esta factura?')) return;
+  facturas=facturas.filter(function(f){return f.id!==id;});
+  localStorage.setItem('jr_facturas',JSON.stringify(facturas));
+  renderFacturas();
+  showToast('Factura eliminada');
+}
+
+// ---- PANEL ----
+function rPanel() {
+  var mes=document.getElementById('panel-mes').value||getMesActual();
+  var grua=document.getElementById('panel-grua').value;
+  var ff=facturas.filter(function(f){
+    return mesKey(f.fecha)===mes&&(!grua||f.grua===grua||f.grua==='Ambas');
+  });
+  var total=ff.reduce(function(s,f){return s+f.total;},0);
+  var nProd=ff.reduce(function(s,f){return s+f.lineas.reduce(function(ss,l){return ss+l.cantidad;},0);},0);
+  document.getElementById('panel-stats').innerHTML=
+    '<div class="stat rojo"><div class="stat-label">Gasto del mes</div><div class="stat-value">'+fmt(total)+'</div><div class="stat-sub">'+ff.length+' facturas</div></div>'+
+    '<div class="stat"><div class="stat-label">Facturas</div><div class="stat-value">'+ff.length+'</div><div class="stat-sub">'+mesLabel(mes)+'</div></div>'+
+    '<div class="stat verde"><div class="stat-label">Unidades compradas</div><div class="stat-value">'+Math.round(nProd)+'</div></div>'+
+    '<div class="stat amarillo"><div class="stat-label">Ticket promedio</div><div class="stat-value">'+fmt(ff.length?total/ff.length:0)+'</div></div>';
+  // Top proveedores
+  var byProv={};
+  ff.forEach(function(f){byProv[f.proveedor]=(byProv[f.proveedor]||0)+f.total;});
+  var topProv=Object.entries(byProv).sort(function(a,b){return b[1]-a[1];}).slice(0,6);
+  var mxP=topProv.length?topProv[0][1]:1;
+  document.getElementById('panel-proveedores').innerHTML=topProv.length?topProv.map(function(e){
+    return '<div class="bar-row"><div class="bar-label" title="'+e[0]+'">'+e[0]+'</div>'+
+    '<div class="bar-track"><div class="bar-fill" style="width:'+Math.round(e[1]/mxP*100)+'%"></div></div>'+
+    '<div class="bar-val">'+fmt(e[1])+'</div></div>';
+  }).join(''):'<div style="font-size:13px;color:var(--muted)">Sin datos</div>';
+  // Últimas facturas
+  document.getElementById('panel-ultimas').innerHTML=ff.slice().reverse().slice(0,5).map(function(f){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5">'+
+      '<div><div style="font-size:13px;font-weight:600">'+f.proveedor+'</div>'+
+      '<div style="font-size:11px;color:var(--muted)">'+fmtF(f.fecha)+' · '+f.grua+'</div></div>'+
+      '<div style="font-size:14px;font-weight:700;color:var(--acento)">'+fmt(f.total)+'</div></div>';
+  }).join('')||'<div style="font-size:13px;color:var(--muted)">Sin facturas este mes</div>';
+  // Top productos
+  var byProd={};
+  ff.forEach(function(f){f.lineas.forEach(function(l){
+    if(!byProd[l.producto]) byProd[l.producto]={total:0,qty:0};
+    byProd[l.producto].total+=l.subtotal; byProd[l.producto].qty+=l.cantidad;
+  });});
+  var topProd=Object.entries(byProd).sort(function(a,b){return b[1].total-a[1].total;}).slice(0,8);
+  var mxPr=topProd.length?topProd[0][1].total:1;
+  document.getElementById('panel-productos').innerHTML=topProd.length?topProd.map(function(e){
+    return '<div class="bar-row"><div class="bar-label" title="'+e[0]+'">'+e[0]+'</div>'+
+    '<div class="bar-track"><div class="bar-fill verde" style="width:'+Math.round(e[1].total/mxPr*100)+'%"></div></div>'+
+    '<div class="bar-val">'+fmt(e[1].total)+'</div></div>';
+  }).join(''):'<div style="font-size:13px;color:var(--muted)">Sin datos</div>';
+}
+
+// ---- INFORME ----
+function rInforme() {
+  var mes=document.getElementById('inf-mes').value||getMesActual();
+  var grua=document.getElementById('inf-grua').value;
+  var ff=facturas.filter(function(f){
+    return mesKey(f.fecha)===mes&&(!grua||f.grua===grua||f.grua==='Ambas');
+  });
+  var total=ff.reduce(function(s,f){return s+f.total;},0);
+  var nF=ff.length;
+  var nProd=ff.reduce(function(s,f){return s+f.lineas.reduce(function(ss,l){return ss+l.cantidad;},0);},0);
+  var nProv=new Set(ff.map(function(f){return f.proveedor;})).size;
+  document.getElementById('inf-stats').innerHTML=
+    '<div class="stat rojo"><div class="stat-label">Total gastado</div><div class="stat-value">'+fmt(total)+'</div></div>'+
+    '<div class="stat"><div class="stat-label">Facturas</div><div class="stat-value">'+nF+'</div></div>'+
+    '<div class="stat"><div class="stat-label">Proveedores</div><div class="stat-value">'+nProv+'</div></div>'+
+    '<div class="stat verde"><div class="stat-label">Unidades</div><div class="stat-value">'+Math.round(nProd)+'</div></div>';
+  // Por proveedor
+  var byProv={};
+  ff.forEach(function(f){byProv[f.proveedor]=(byProv[f.proveedor]||0)+f.total;});
+  var topProv=Object.entries(byProv).sort(function(a,b){return b[1]-a[1];});
+  var mxP=topProv.length?topProv[0][1]:1;
+  document.getElementById('inf-prov').innerHTML=topProv.map(function(e){
+    return '<div class="bar-row"><div class="bar-label" title="'+e[0]+'">'+e[0]+'</div>'+
+    '<div class="bar-track"><div class="bar-fill" style="width:'+Math.round(e[1]/mxP*100)+'%"></div></div>'+
+    '<div class="bar-val">'+fmt(e[1])+'</div></div>';
+  }).join('')||'<div style="font-size:13px;color:var(--muted)">Sin datos</div>';
+  // Por categoría
+  var byCat={};
+  ff.forEach(function(f){f.lineas.forEach(function(l){
+    var prod=catalogo.find(function(p){return p.nombre===l.producto;});
+    var cat=prod?prod.cat:'Sin categoría';
+    byCat[cat]=(byCat[cat]||0)+l.subtotal;
+  });});
+  var topCat=Object.entries(byCat).sort(function(a,b){return b[1]-a[1];});
+  var mxC=topCat.length?topCat[0][1]:1;
+  document.getElementById('inf-cat').innerHTML=topCat.map(function(e){
+    return '<div class="bar-row"><div class="bar-label" title="'+e[0]+'">'+e[0]+'</div>'+
+    '<div class="bar-track"><div class="bar-fill verde" style="width:'+Math.round(e[1]/mxC*100)+'%"></div></div>'+
+    '<div class="bar-val">'+fmt(e[1])+'</div></div>';
+  }).join('')||'<div style="font-size:13px;color:var(--muted)">Sin datos</div>';
+  // Tabla productos
+  var byProd={};
+  ff.forEach(function(f){f.lineas.forEach(function(l){
+    var prod=catalogo.find(function(p){return p.nombre===l.producto;});
+    var cat=prod?prod.cat:'Sin categoría';
+    if(!byProd[l.producto]) byProd[l.producto]={cat:cat,qty:0,total:0,precios:[]};
+    byProd[l.producto].qty+=l.cantidad;
+    byProd[l.producto].total+=l.subtotal;
+    byProd[l.producto].precios.push(l.precio);
+  });});
+  var rows=Object.entries(byProd).sort(function(a,b){return b[1].total-a[1].total;});
+  document.getElementById('inf-tabla').innerHTML=rows.map(function(e){
+    var avg=e[1].precios.reduce(function(s,p){return s+p;},0)/e[1].precios.length;
+    return '<tr><td style="font-weight:500">'+e[0]+'</td><td style="font-size:11px;color:var(--muted)">'+e[1].cat+'</td>'+
+      '<td>'+Math.round(e[1].qty)+'</td>'+
+      '<td style="font-weight:600;color:var(--acento)">'+fmt(e[1].total)+'</td>'+
+      '<td>'+fmt(avg)+'</td></tr>';
+  }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">Sin datos</td></tr>';
+}
+
+function exportCSV() {
+  var mes=document.getElementById('inf-mes').value||getMesActual();
+  var grua=document.getElementById('inf-grua').value;
+  var ff=facturas.filter(function(f){return mesKey(f.fecha)===mes&&(!grua||f.grua===grua||f.grua==='Ambas');});
+  var rows=[['Fecha','Proveedor','N° Factura','Grúa','Pago','Producto','Cantidad','Precio Unit.','Subtotal']];
+  ff.forEach(function(f){
+    f.lineas.forEach(function(l){
+      rows.push([f.fecha,f.proveedor,f.numero||'',f.grua,f.mpago,l.producto,l.cantidad,l.precio,l.subtotal]);
+    });
+  });
+  var csv=rows.map(function(r){return r.map(function(x){return '"'+(x||'')+'"';}).join(',');}).join('\n');
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download='joserana_'+mes+'.csv';
+  a.click();
+}
+
+// ---- CATÁLOGO ----
+function renderCatalogo() {
+  var q=(document.getElementById('busq-cat').value||'').toLowerCase();
+  var fc=document.getElementById('filtro-cat').value;
+  var cats=[...new Set(catalogo.map(function(p){return p.cat;}))].sort();
+  document.getElementById('filtro-cat').innerHTML='<option value="">Todas las categorías</option>'+cats.map(function(c){return '<option value="'+c+'"'+(fc===c?' selected':'')+'>'+c+'</option>';}).join('');
+  document.getElementById('filtro-cat').value=fc;
+  var f=catalogo.filter(function(p){
+    return (!q||p.nombre.toLowerCase().includes(q)||p.cat.toLowerCase().includes(q))&&(!fc||p.cat===fc);
+  });
+  // Datalist categorías
+  document.getElementById('cat-list').innerHTML=cats.map(function(c){return '<option value="'+c+'">';}).join('');
+  document.getElementById('cat-tabla').innerHTML=f.map(function(p,i){
+    var ri=catalogo.indexOf(p);
+    return '<tr><td style="font-weight:500">'+p.nombre+'</td>'+
+      '<td style="font-size:11px;color:var(--muted)">'+p.cat+'</td>'+
+      '<td>'+fmt(p.costo)+'</td><td>'+fmt(p.venta)+'</td>'+
+      '<td><button class="btn-sm" onclick="editarProducto('+ri+')">✏️</button> <button class="btn-danger" onclick="eliminarProducto('+ri+')">🗑</button></td></tr>';
+  }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">Sin productos</td></tr>';
+}
+
+function abrirModalProducto() {
+  editProdIdx=null;
+  document.getElementById('modal-prod-titulo').textContent='Nuevo producto';
+  document.getElementById('prod-nombre').value='';
+  document.getElementById('prod-cat').value='';
+  document.getElementById('prod-costo').value='';
+  document.getElementById('prod-venta').value='';
+  document.getElementById('modal-producto').classList.add('show');
+}
+
+function editarProducto(i) {
+  editProdIdx=i;
+  var p=catalogo[i];
+  document.getElementById('modal-prod-titulo').textContent='Editar producto';
+  document.getElementById('prod-nombre').value=p.nombre;
+  document.getElementById('prod-cat').value=p.cat;
+  document.getElementById('prod-costo').value=p.costo||'';
+  document.getElementById('prod-venta').value=p.venta||'';
+  document.getElementById('modal-producto').classList.add('show');
+}
+
+function cerrarModalProducto() { document.getElementById('modal-producto').classList.remove('show'); }
+
+function guardarProducto() {
+  var nombre=document.getElementById('prod-nombre').value.trim().toUpperCase();
+  var cat=document.getElementById('prod-cat').value.trim();
+  if(!nombre||!cat){showToast('Completá nombre y categoría');return;}
+  var prod={nombre:nombre,cat:cat,costo:parseFloat(document.getElementById('prod-costo').value)||0,venta:parseFloat(document.getElementById('prod-venta').value)||0};
+  if(editProdIdx!==null) catalogo[editProdIdx]=prod;
+  else catalogo.push(prod);
+  catalogo.sort(function(a,b){return a.cat.localeCompare(b.cat)||a.nombre.localeCompare(b.nombre);});
+  localStorage.setItem('jr_catalogo',JSON.stringify(catalogo));
+  cerrarModalProducto();
+  renderCatalogo();
+  showToast('✅ Producto guardado');
+}
+
+function eliminarProducto(i) {
+  if(!confirm('¿Eliminar este producto del catálogo?')) return;
+  catalogo.splice(i,1);
+  localStorage.setItem('jr_catalogo',JSON.stringify(catalogo));
+  renderCatalogo();
+  showToast('Producto eliminado');
+}
+
+// ---- CONFIG ----
+function rConfig() {
+  document.getElementById('cfg-url').value=SCRIPT_URL||'';
+  document.getElementById('cfg-estado').textContent=SCRIPT_URL?'Conectado: '+SCRIPT_URL.slice(0,60)+'...':'Sin configurar. Las facturas se guardan localmente.';
+  var gk=localStorage.getItem('jr_gemini_key')||'';
+  document.getElementById('cfg-gemini').value=gk?'••••••••••••••••••••••••••••••••••••':'';
+  document.getElementById('cfg-gemini-estado').textContent=gk?'✅ Clave guardada — lectura IA activa':'Sin configurar. Pegá tu clave de Gemini.';
+  document.getElementById('cfg-gemini-estado').style.color=gk?'var(--verde)':'var(--muted)';
+}
+
+function guardarGeminiKey() {
+  var k=document.getElementById('cfg-gemini').value.trim();
+  if (!k||k.startsWith('•')) { showToast('Pegá tu clave de Gemini'); return; }
+  if (!k.startsWith('AIza')) { showToast('La clave debe empezar con AIza...'); return; }
+  localStorage.setItem('jr_gemini_key', k);
+  showToast('✅ Clave Gemini guardada');
+  rConfig();
+}
+
+function guardarConfig() {
+  var url=document.getElementById('cfg-url').value.trim();
+  if(url&&!url.startsWith('https://script.google.com')){showToast('URL inválida');return;}
+  SCRIPT_URL=url;
+  localStorage.setItem('jr_url',url);
+  showToast('Guardado');
+  rConfig();
+}
+
+function actualizarProvList() {
+  var provs=[...new Set(facturas.map(function(f){return f.proveedor;}))].sort();
+  document.getElementById('prov-list').innerHTML=provs.map(function(p){return '<option value="'+p+'">';}).join('');
+}
+
+// ---- LECTOR IA ----
+function leerFacturaIA(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var isPDF = file.type === 'application/pdf';
+
+  // Mostrar preview
+  document.getElementById('ia-preview').style.display = 'block';
+  if (isPDF) {
+    document.getElementById('ia-pdf-info').style.display = 'block';
+    document.getElementById('ia-pdf-info').textContent = '📄 ' + file.name;
+    document.getElementById('ia-img').style.display = 'none';
+  } else {
+    var imgEl = document.getElementById('ia-img');
+    imgEl.style.display = 'block';
+    document.getElementById('ia-pdf-info').style.display = 'none';
+    imgEl.src = URL.createObjectURL(file);
+  }
+
+  // Mostrar estado
+  var statusEl = document.getElementById('ia-status');
+  statusEl.style.display = 'block';
+  document.getElementById('ia-spinner').textContent = '⏳';
+  document.getElementById('ia-status-txt').textContent = 'Leyendo factura...';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var base64 = e.target.result.split(',')[1];
+    var mediaType = isPDF ? 'application/pdf' : file.type;
+
+    var GEMINI_KEY = localStorage.getItem('jr_gemini_key') || '';
+    if (!GEMINI_KEY) {
+      iaError('Falta la API Key de Gemini. Andá a Config y pegála.');
+      return;
+    }
+    var geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_KEY;
+    var geminiBody;
+    if (isPDF) {
+      geminiBody = {
+        contents: [{ parts: [
+          { inline_data: { mime_type: mediaType, data: base64 } },
+          { text: PROMPT_IA }
+        ]}]
+      };
+    } else {
+      geminiBody = {
+        contents: [{ parts: [
+          { inline_data: { mime_type: mediaType, data: base64 } },
+          { text: PROMPT_IA }
+        ]}]
+      };
+    }
+    fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiBody)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      var texto = res.candidates && res.candidates[0] && res.candidates[0].content && res.candidates[0].content.parts && res.candidates[0].content.parts[0] && res.candidates[0].content.parts[0].text;
+      if (!texto) { iaError('No se pudo leer la factura'); return; }
+      try {
+        var clean = texto.replace(/```json|```/g,'').trim();
+        var datos = JSON.parse(clean);
+        cargarDatosIA(datos);
+        document.getElementById('ia-spinner').textContent = '✅';
+        document.getElementById('ia-status-txt').textContent = 'Factura leída — revisá los datos y guardá';
+        document.getElementById('ia-status').firstElementChild.style.background = '#f0fdf4';
+        document.getElementById('ia-status').firstElementChild.style.color = '#15803d';
+      } catch(e) {
+        iaError('No se reconoció el formato. Revisá la imagen.');
+      }
+    })
+    .catch(function(e) { iaError('Error de conexión: ' + e.message); });
+  };
+  reader.readAsDataURL(file);
+}
+
+var PROMPT_IA = 'Sos un asistente que extrae datos de facturas de distribuidoras de bebidas y alimentos. ' +
+'Analizá esta factura y devolvé ÚNICAMENTE un JSON con este formato exacto, sin texto adicional:\n' +
+'{\n' +
+'  "proveedor": "nombre del proveedor o empresa",\n' +
+'  "numero": "número de factura o boleta",\n' +
+'  "fecha": "YYYY-MM-DD o vacío si no se ve",\n' +
+'  "lineas": [\n' +
+'    {"producto": "NOMBRE EN MAYÚSCULAS", "cantidad": número, "precio": precio_unitario}\n' +
+'  ]\n' +
+'}\n' +
+'Importante: precio debe ser el precio UNITARIO. Si la factura solo muestra el total de línea, dividilo por la cantidad. ' +
+'Si no podés leer algún campo con certeza, dejalo vacío. Solo devolvé el JSON, nada más.';
+
+function cargarDatosIA(datos) {
+  // Rellenar campos de cabecera
+  if (datos.proveedor) document.getElementById('f-proveedor').value = datos.proveedor;
+  if (datos.numero) document.getElementById('f-numero').value = datos.numero;
+  if (datos.fecha) document.getElementById('f-fecha').value = datos.fecha;
+
+  // Limpiar lineas existentes y cargar las nuevas
+  document.getElementById('lineas-body').innerHTML = '';
+  if (datos.lineas && datos.lineas.length) {
+    datos.lineas.forEach(function(l) {
+      agregarLinea();
+      var rows = document.querySelectorAll('#lineas-body .linea-row');
+      var row = rows[rows.length - 1];
+      var inputs = row.querySelectorAll('input');
+      inputs[0].value = l.producto || '';
+      inputs[1].value = l.cantidad || '';
+      inputs[2].value = l.precio || '';
+      calcLinea(row.id);
+    });
+  }
+  calcTotal();
+  showToast('✅ ' + (datos.lineas ? datos.lineas.length : 0) + ' productos cargados');
+}
+
+function iaError(msg) {
+  document.getElementById('ia-spinner').textContent = '❌';
+  document.getElementById('ia-status-txt').textContent = msg;
+  document.getElementById('ia-status').firstElementChild.style.background = '#fef2f2';
+  document.getElementById('ia-status').firstElementChild.style.borderColor = '#fca5a5';
+  document.getElementById('ia-status').firstElementChild.style.color = '#b91c1c';
+}
+
+// INIT
+document.getElementById('f-fecha').value=hoy();
+actualizarDatalist();
+actualizarProvList();
+poblarSelectMes('panel-mes', getMesActual());
+rPanel();
+setSyncStatus(SCRIPT_URL?'Conectado':'Sin Sheet','ok');
+</script>
+</body>
+</html>
