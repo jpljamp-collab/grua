@@ -368,8 +368,9 @@ tr:hover td { background: #f0fdf4; }
 
 <!-- VENTAS -->
 <div id="v-ventas" class="view">
-  <div class="search-row">
-    <input type="text" id="busq" placeholder="Buscar por cliente, talonario, factura o boleta..." oninput="renderT()">
+  <div class="search-row" style="display:flex;gap:8px;flex-wrap:wrap">
+    <input type="text" id="busq" placeholder="🔍 Buscar por cliente..." oninput="renderT()" style="flex:1;min-width:150px">
+    <input type="text" id="busq-doc" placeholder="# Talonario o factura exacto..." oninput="renderT()" style="flex:1;min-width:150px">
     <button class="btn-sec" onclick="exportCSV()">CSV</button>
   </div>
   <div class="chips">
@@ -958,11 +959,13 @@ function rPanel() {
 }
 
 function renderT() {
-  var q = (document.getElementById('busq').value||'').toLowerCase();
+  var q = (document.getElementById('busq').value||'').toLowerCase().trim();
+  var qDoc = (document.getElementById('busq-doc').value||'').trim();
   var f = ventas.filter(function(v){
     var mf = filtro==='todos'||v.estado===filtro;
-    var mq = !q||v.cliente.toLowerCase().includes(q)||noficial(v.cliente).toLowerCase().includes(q)||String(v.talon).includes(q)||String(v.factura).includes(q)||(v.vendedor||'').toLowerCase().includes(q);
-    return mf&&mq;
+    var mq = !q||v.cliente.toLowerCase().includes(q)||noficial(v.cliente).toLowerCase().includes(q)||(v.vendedor||'').toLowerCase().includes(q);
+    var mDoc = !qDoc||String(v.talon||'')===qDoc||String(v.factura||'')===qDoc;
+    return mf&&mq&&mDoc;
   });
   var tb = document.getElementById('tbody');
   if (!f.length) { tb.innerHTML='<tr><td colspan="19" style="text-align:center;padding:2rem;color:#aaa">Sin resultados</td></tr>'; return; }
