@@ -327,10 +327,12 @@ tr:hover td { background: #fef9f9; }
       <input type="text" id="cfg-url" placeholder="https://script.google.com/macros/s/...">
     </div>
     <div id="cfg-url-st" style="font-size:13px;margin:8px 0"></div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn-primary" onclick="guardarURL()">Guardar</button>
-      <button class="btn-sec" onclick="sincronizar();showToast('Sincronizando...')">🔄 Sincronizar ahora</button>
+      <button class="btn-sec" onclick="sincronizar();showToast('Bajando datos del Sheet...')">⬇️ Bajar del Sheet</button>
+      <button class="btn-verde" onclick="subirTodoAlSheet()">⬆️ Subir TODO al Sheet</button>
     </div>
+    <div id="sync-progress" style="display:none;margin-top:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;font-size:13px;color:#1d4ed8"></div>
   </div>
 </div>
 </div>
@@ -1925,6 +1927,51 @@ function sincronizar(){
       document.getElementById('sync-st').textContent='● Sin conexión';
       document.getElementById('sync-st').style.color='#fca5a5';
     });
+}
+function subirTodoAlSheet(){
+  if(!SCRIPT_URL){alert('Primero configurá la URL del Apps Script y apretá Guardar');return;}
+  if(!confirm('Esto va a subir TODOS tus datos (facturas, cargas, inventarios, mermas) al Google Sheet. Puede tardar 1-2 minutos. ¿Continuar?'))return;
+  var prog=document.getElementById('sync-progress');
+  if(prog){prog.style.display='block';prog.innerHTML='⏳ Subiendo datos al Sheet...';}
+  var ff=JSON.parse(localStorage.getItem('gr_facturas')||'[]');
+  var cc=JSON.parse(localStorage.getItem('gr_cargas')||'[]');
+  var mm=JSON.parse(localStorage.getItem('gr_mermas')||'[]');
+  var ii=JSON.parse(localStorage.getItem('gr_inventarios')||'[]');
+  var total=ff.length+cc.length+mm.length+ii.length;
+  if(total===0){
+    if(prog)prog.innerHTML='No hay datos para subir';
+    return;
+  }
+  var subidos=0,errores=0;
+  function actualizar(){
+    if(prog)prog.innerHTML='⏳ Subiendo... '+subidos+' / '+total+(errores>0?' · '+errores+' errores':'');
+  }
+  function subirItem(action,item,cb){
+    fetch(SCRIPT_URL+'?action='+action+'&data='+encodeURIComponent(JSON.stringify({item:item})))
+      .then(function(r){return r.json();})
+      .then(function(){subidos++;actualizar();cb();})
+      .catch(function(){errores++;subidos++;actualizar();cb();});
+  }
+  // Cola de items para subir secuencialmente (no en paralelo, para no saturar Apps Script)
+  var cola=[];
+  ff.forEach(function(f){cola.push({a:'saveFactura',i:f});});
+  cc.forEach(function(c){cola.push({a:'saveCarga',i:c});});
+  mm.forEach(function(m){cola.push({a:'saveMerma',i:m});});
+  ii.forEach(function(inv){cola.push({a:'saveInventario',i:inv});});
+  var idx=0;
+  function siguiente(){
+    if(idx>=cola.length){
+      if(prog){
+        prog.innerHTML='✅ Listo: '+subidos+' items subidos al Sheet'+(errores>0?' · '+errores+' errores':'');
+        prog.style.background='#f0fdf4';prog.style.borderColor='#bbf7d0';prog.style.color='#15803d';
+      }
+      showToast('✅ Datos subidos al Sheet');
+      return;
+    }
+    var item=cola[idx++];
+    subirItem(item.a,item.i,siguiente);
+  }
+  siguiente();
 }
 function enviarSheet(action,item){
   if(!SCRIPT_URL)return;
