@@ -2114,6 +2114,49 @@ function enviarSheet(action,item){
   }catch(e){console.error('Error copiando inventario:',e);}
 })();
 
+// ---- ONE-SHOT: actualizar precios de costo desde Excel + eliminar duplicados ----
+(function actualizarPreciosV1(){
+  if(localStorage.getItem('gr_precios_excel_v1'))return;
+  try{
+    var precios={
+      'GALLETA LIMON':700,'GALLETA TRITON':550,'GALLETAS FRAC':550,'GALLETA MANTEQUILLA':700,
+      'GALLETA NIK':450,'GALLETA CHOCO CHIPS':720,'GALLETA DINDON':500,'GALLETA OREO':550,
+      'GALLETA SODA PEQ':250,'GALLETA CRACKER PEQ':210,'GALLETA MOROCHA':280,'MENTAS':220,
+      'TURRON':250,'SUPER 8':230,'GOLPE':220,'CHOCMAN':160,'CEREAL BAR':250,'NIKOLO 24G':250,
+      'CAPRI 30G':300,'BON O BON':180,'RAYITA':260,'NEGRITA':280,'GALLETON DE AVENA':600,
+      'ROCKLETS':380,'ALFAJOR CLASICO':140,'BIGTIME':250,'PAPAS':700,'DORITOS':700,
+      'SNACK MIX':700,'PINGUINO':450,'GANSITO':620,'BROWNIE':450,'ALKA':400,'ENCENDEDOR':250,
+      'PAÑUELO':450,'MANTECOL':450,'SOPAS':700
+    };
+    var prods=JSON.parse(localStorage.getItem('gr_productos')||'[]');
+    // 1) Eliminar duplicados (deja el primero, descarta los siguientes con mismo nombre case-insensitive)
+    var seen={},sinDup=[];
+    prods.forEach(function(p){
+      var k=p.n.toUpperCase().trim();
+      if(!seen[k]){seen[k]=true; sinDup.push(p);}
+      else{
+        // Si el actual tiene precio y el guardado no, reemplazar
+        var idx=sinDup.findIndex(function(x){return x.n.toUpperCase().trim()===k;});
+        if(idx>=0 && (!sinDup[idx].co||sinDup[idx].co===0) && p.co>0)sinDup[idx]=p;
+      }
+    });
+    var dupsRemovidos=prods.length-sinDup.length;
+    // 2) Actualizar precios desde Excel (matching case-insensitive)
+    var actualizados=0;
+    sinDup.forEach(function(p){
+      var k=p.n.toUpperCase().trim();
+      if(precios[k]!==undefined && p.co!==precios[k]){
+        p.co=precios[k];
+        actualizados++;
+      }
+    });
+    localStorage.setItem('gr_productos',JSON.stringify(sinDup));
+    productos=sinDup;
+    localStorage.setItem('gr_precios_excel_v1','1');
+    console.log('💰 Precios actualizados: '+actualizados+' productos · Duplicados eliminados: '+dupsRemovidos);
+  }catch(e){console.error('Error actualizando precios:',e);}
+})();
+
 // ---- LIMPIEZA ONE-SHOT: borrar TODOS los inventarios (a pedido del usuario para volver a cargar) ----
 (function borrarInventariosTodos(){
   if(localStorage.getItem('gr_borrar_inv_v1'))return;
