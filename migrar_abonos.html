@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Migración de abonos — Papelón</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; color: #1a1a1a; padding: 30px 20px; min-height: 100vh; }
+.box { background: white; max-width: 600px; margin: 0 auto; border-radius: 16px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+h1 { color: #166534; font-size: 24px; margin-bottom: 8px; }
+.sub { color: #888; font-size: 14px; margin-bottom: 24px; }
+.step { background: #f0fdf4; border-left: 4px solid #166534; padding: 14px 16px; margin-bottom: 12px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
+.step b { color: #166534; }
+button { background: #166534; color: white; border: none; padding: 16px 28px; font-size: 16px; font-weight: 600; border-radius: 10px; cursor: pointer; width: 100%; margin-top: 14px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:hover:not(:disabled) { background: #14532d; }
+.status { margin-top: 16px; padding: 14px; border-radius: 8px; font-size: 14px; line-height: 1.5; }
+.status.ok { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.status.err { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.status.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.stats { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-top: 14px; }
+.stat { background: #fafafa; padding: 12px; border-radius: 8px; text-align: center; }
+.stat-l { font-size: 11px; color: #888; text-transform: uppercase; }
+.stat-v { font-size: 20px; font-weight: 700; color: #166534; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>📥 Migración de abonos</h1>
+  <div class="sub">Recuperá los abonos cargados en este navegador para enviárselos a la administración.</div>
+
+  <div class="step">
+    <b>1.</b> Asegurate de estar usando <b>el mismo navegador y computadora</b> donde venías cargando los pagos.
+  </div>
+  <div class="step">
+    <b>2.</b> Hacé clic en el botón verde de abajo.
+  </div>
+  <div class="step">
+    <b>3.</b> Se descarga un archivo. <b>Mandalo por mail o WhatsApp a la administración.</b>
+  </div>
+
+  <button id="btn" onclick="exportar()">📥 Descargar abonos</button>
+
+  <div id="status"></div>
+  <div id="stats" class="stats" style="display:none"></div>
+</div>
+
+<script>
+var SCRIPT_URL_VIEJA = "https://script.google.com/macros/s/AKfycbxGKfmjMj_RfvoorPphFhlXcCFNMr-aHM2GSP_aotMRJY6P-1cKCoeiTM1ahwoZO0cNGg/exec";
+
+function setStatus(msg, type) {
+  var s = document.getElementById('status');
+  s.className = 'status ' + (type||'info');
+  s.innerHTML = msg;
+}
+
+async function exportar() {
+  var btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+  setStatus('🔄 Leyendo abonos guardados en este navegador...', 'info');
+
+  try {
+    // 1. Leer abonos del localStorage
+    var abonos = JSON.parse(localStorage.getItem('papelon_abonos') || '{}');
+    var totalAbonos = 0;
+    Object.keys(abonos).forEach(function(k){ totalAbonos += abonos[k].length; });
+
+    if (totalAbonos === 0) {
+      setStatus('⚠️ No se encontraron abonos guardados en este navegador.<br>Esto puede pasar si los cargaste en otro navegador o si ya se borraron.', 'err');
+      btn.disabled = false;
+      btn.textContent = '📥 Descargar abonos';
+      return;
+    }
+
+    setStatus('🔄 Encontré <b>' + totalAbonos + '</b> abonos. Buscando información de las ventas...', 'info');
+
+    // 2. Llamar a la API vieja para obtener ventas con IDs
+    var resp = await fetch(SCRIPT_URL_VIEJA + '?action=getVentas');
+    if (!resp.ok) throw new Error('No se pudo conectar con la base de datos vieja');
+    var data = await resp.json();
+    if (!data.ventas) throw new Error('La base no devolvió ventas');
+
+    var ventasMap = {};
+    data.ventas.forEach(function(v){ ventasMap[String(v.id)] = v; });
+
+    // 3. Matchear cada abono con su venta
+    var matched = [];
+    var huerfanos = 0;
+    Object.keys(abonos).forEach(function(ventaId){
+      var venta = ventasMap[String(ventaId)];
+      if (!venta) {
+        huerfanos += abonos[ventaId].length;
+        return;
+      }
+      abonos[ventaId].forEach(function(a){
+        matched.push({
+          cliente: venta.cliente,
+          talon: venta.talon,
+          fecha_venta: venta.fecha,
+          factura: venta.factura,
+          monto: a.monto,
+          fecha_abono: a.fecha,
+          mpago: a.mpago || '',
+          banco: a.banco || '',
+          boleta: a.boleta || '',
+          origen: a.origen || ''
+        });
+      });
+    });
+
+    // 4. Generar archivo CSV (más fácil de leer)
+    var headers = ['cliente','talon','fecha_venta','factura','monto','fecha_abono','mpago','banco','boleta','origen'];
+    var rows = matched.map(function(a){
+      return headers.map(function(h){
+        var v = a[h] || '';
+        return '"' + String(v).replace(/"/g,'""') + '"';
+      }).join(',');
+    });
+    var csv = headers.join(',') + '\n' + rows.join('\n');
+
+    // 5. Descargar
+    var blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'abonos_jefe_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    var totalDinero = matched.reduce(function(s,a){return s + (Number(a.monto)||0);}, 0);
+
+    setStatus('✅ Archivo descargado correctamente. Ahora envialo a la administración.', 'ok');
+    document.getElementById('stats').style.display = 'grid';
+    document.getElementById('stats').innerHTML =
+      '<div class="stat"><div class="stat-l">Abonos rescatados</div><div class="stat-v">' + matched.length + '</div></div>' +
+      '<div class="stat"><div class="stat-l">Total $</div><div class="stat-v">$' + totalDinero.toLocaleString('es-CL') + '</div></div>' +
+      (huerfanos > 0 ? '<div class="stat" style="grid-column:1/-1;background:#fef3c7"><div class="stat-l">Sin venta asociada</div><div class="stat-v" style="color:#92400e">' + huerfanos + '</div></div>' : '');
+
+    btn.textContent = '📥 Volver a descargar';
+    btn.disabled = false;
+  } catch(err) {
+    console.error(err);
+    setStatus('❌ Error: ' + (err.message || err) + '<br><br>Asegurate de tener internet y de estar en el mismo navegador donde cargaste los pagos.', 'err');
+    btn.disabled = false;
+    btn.textContent = '📥 Reintentar';
+  }
+}
+</script>
+</body>
+</html>
