@@ -1920,10 +1920,41 @@ function sincronizar(){
   fetch(SCRIPT_URL+'?action=getData')
     .then(function(r){return r.json();})
     .then(function(data){
-      if(data.facturas&&data.facturas.length){data.facturas.forEach(function(f){if(!facturas.find(function(x){return x.id===f.id;})) facturas.push(f);});localStorage.setItem('gr_facturas',JSON.stringify(facturas));}
-      if(data.cargas&&data.cargas.length){data.cargas.forEach(function(c){if(!cargas.find(function(x){return x.id===c.id;})) cargas.push(c);});localStorage.setItem('gr_cargas',JSON.stringify(cargas));}
-      if(data.mermas&&data.mermas.length){data.mermas.forEach(function(m){if(!mermas.find(function(x){return x.id===m.id;})) mermas.push(m);});localStorage.setItem('gr_mermas',JSON.stringify(mermas));}
-      if(data.inventarios&&data.inventarios.length){data.inventarios.forEach(function(inv){var existe=inventarios.find(function(x){return x.mes===inv.mes&&x.grua===inv.grua&&x.tipo===inv.tipo;});if(!existe) inventarios.push(inv);});localStorage.setItem('gr_inventarios',JSON.stringify(inventarios));}
+      // FACTURAS: dedup por id, el remoto reemplaza al local si coincide id
+      if(data.facturas&&data.facturas.length){
+        data.facturas.forEach(function(f){
+          var i=facturas.findIndex(function(x){return x.id===f.id;});
+          if(i>=0) facturas[i]=f; else facturas.push(f);
+        });
+        localStorage.setItem('gr_facturas',JSON.stringify(facturas));
+      }
+      // CARGAS: dedup por mes+grua+semana+tipo, el remoto SIEMPRE gana
+      if(data.cargas&&data.cargas.length){
+        data.cargas.forEach(function(c){
+          var i=cargas.findIndex(function(x){return x.mes===c.mes&&x.grua===c.grua&&x.semana===c.semana&&x.tipo===c.tipo;});
+          if(i>=0) cargas[i]=c; else cargas.push(c);
+        });
+        localStorage.setItem('gr_cargas',JSON.stringify(cargas));
+      }
+      // MERMAS: dedup por id; si coincide remoto reemplaza
+      if(data.mermas&&data.mermas.length){
+        data.mermas.forEach(function(m){
+          var i=mermas.findIndex(function(x){return x.id===m.id;});
+          if(i>=0) mermas[i]=m; else mermas.push(m);
+        });
+        localStorage.setItem('gr_mermas',JSON.stringify(mermas));
+      }
+      // INVENTARIOS: dedup por mes+grua+tipo, remoto reemplaza
+      if(data.inventarios&&data.inventarios.length){
+        data.inventarios.forEach(function(inv){
+          var i=inventarios.findIndex(function(x){return x.mes===inv.mes&&x.grua===inv.grua&&x.tipo===inv.tipo;});
+          if(i>=0) inventarios[i]=inv; else inventarios.push(inv);
+        });
+        localStorage.setItem('gr_inventarios',JSON.stringify(inventarios));
+      }
+      // Re-renderizar para que la pantalla muestre lo que se acaba de bajar
+      try{if(typeof rPanel==='function')rPanel();}catch(e){}
+      try{if(typeof rConfig==='function')rConfig();}catch(e){}
       document.getElementById('sync-st').textContent='● Sincronizado';
       document.getElementById('sync-st').style.color='#a9dfbf';
     })
@@ -1932,6 +1963,33 @@ function sincronizar(){
       document.getElementById('sync-st').style.color='#fca5a5';
     });
 }
+// ---- ONE-SHOT: dedup de cargas locales que quedaron duplicadas por bug viejo ----
+(function dedupCargasLocales(){
+  if(localStorage.getItem('gr_dedup_cargas_v1'))return;
+  try{
+    var cc=JSON.parse(localStorage.getItem('gr_cargas')||'[]');
+    var vistos={},out=[];
+    cc.forEach(function(c){
+      var k=c.mes+'|'+c.grua+'|'+c.semana+'|'+c.tipo;
+      if(vistos[k]){
+        // ya hay uno con esta clave — quedarse con el que tiene id MAYOR (más reciente)
+        if((c.id||0)>(vistos[k].id||0)){
+          // reemplazar al viejo
+          var idx=out.indexOf(vistos[k]);
+          if(idx>=0) out[idx]=c;
+          vistos[k]=c;
+        }
+      } else {
+        vistos[k]=c;
+        out.push(c);
+      }
+    });
+    localStorage.setItem('gr_cargas',JSON.stringify(out));
+    localStorage.setItem('gr_dedup_cargas_v1','1');
+    if(typeof cargas!=='undefined') cargas=out;
+    console.log('✅ Cargas locales deduplicadas: '+cc.length+' → '+out.length);
+  }catch(e){console.error('Error dedup cargas:',e);}
+})();
 function resetearYBajar(){
   if(!SCRIPT_URL){alert('No hay URL del Apps Script configurada');return;}
   if(!confirm('⚠️ Esto va a BORRAR todos los datos guardados en ESTE navegador y bajar todo desde el Google Sheet de nuevo.\n\nLos datos en el Sheet quedan intactos.\nLos datos en otros navegadores tampoco se tocan.\n\n¿Continuar?'))return;
