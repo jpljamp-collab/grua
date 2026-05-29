@@ -249,6 +249,8 @@ tr:hover td { background: #f0fdf4; }
 <!-- PANEL -->
 <div id="v-panel" class="view active">
   <div id="alertas-banner"></div>
+  <div id="ventas-mes-card"></div>
+  <div id="bloqueados-card"></div>
   <div id="meta-progreso"></div>
   <div class="stats" id="st"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -745,6 +747,14 @@ tr:hover td { background: #f0fdf4; }
             <option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option>
           </select>
         </div>
+        <div class="fl"><label>Excepción de bloqueo</label>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-top:4px">
+            <input type="checkbox" id="c-credito-aprobado" style="width:18px;height:18px;cursor:pointer;flex-shrink:0">
+            <label for="c-credito-aprobado" style="font-size:12px;color:#15803d;cursor:pointer;margin:0">
+              <strong>Crédito aprobado</strong> — este cliente NO se bloquea
+            </label>
+          </div>
+        </div>
         <div class="fl full"><label>Notas</label><textarea id="c-notas" rows="2" placeholder="Observaciones, condiciones especiales..."></textarea></div>
       </div>
       <div style="margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px">
@@ -1144,6 +1154,24 @@ tr:hover td { background: #f0fdf4; }
     <button class="btn-primary" onclick="guardarMeta()">Guardar meta</button>
   </div>
   <div class="card">
+    <h3>⛔ Control de ventas a crédito</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">Bloquea ventas nuevas a clientes con demasiadas facturas sin pagar.</div>
+    <div class="fg2">
+      <div class="fl"><label>Cantidad de facturas sin pagar para bloquear</label>
+        <input type="number" id="cfg-limite-bloqueo" min="1" max="20" placeholder="3" style="width:120px">
+      </div>
+      <div class="fl"><label>WhatsApp de Rubén (con + y código país)</label>
+        <input type="text" id="cfg-rub-tel" placeholder="+56948679298">
+      </div>
+      <div class="fl"><label>Días mínimos para incluir en 'Por cobrar'</label>
+        <input type="number" id="cfg-dias-min-cobro" min="0" max="60" placeholder="5" style="width:120px">
+        <div style="font-size:11px;color:#888;margin-top:4px">Clientes cuya factura más vieja sin pagar tenga menos días que esto, no aparecen en el WhatsApp a Rubén (todavía es muy pronto).</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;padding:8px 12px;border-radius:8px;margin-top:10px">💡 El número de Rubén se usa para los botones del Panel principal.</div>
+    <button class="btn-primary" onclick="guardarControlCredito()" style="margin-top:12px">Guardar control</button>
+  </div>
+  <div class="card">
     <h3>📅 Fecha de inicio del control de inventario</h3>
     <div style="font-size:12px;color:#888;margin-bottom:12px">A partir de esta fecha, el sistema cuenta las ventas, producciones y devoluciones para el cierre de inventario. Lo anterior se ignora (útil si recién empezás a cargar producción/devoluciones).</div>
     <div class="fg2">
@@ -1371,10 +1399,27 @@ tr:hover td { background: #f0fdf4; }
         <input type="number" id="mac-monto" placeholder="$0" inputmode="numeric" min="1" oninput="validarAbonoCli()">
         <div id="mac-error" style="font-size:11px;color:#b91c1c;margin-top:3px;display:none">El abono no puede superar la deuda total</div>
       </div>
-      <div class="fl"><label>N° de boleta</label>
-        <input type="text" id="mac-boleta" placeholder="Ej: 4521" inputmode="numeric">
+      <div class="fl"><label>Fecha del abono</label><input type="date" id="mac-fecha"></div>
+    </div>
+    <div class="fl" style="margin-bottom:12px">
+      <label>¿Cómo pagó?</label>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button type="button" id="mac-tab-transfer" onclick="setMacMpago('TRANSFERENCIA')" style="flex:1;min-width:140px;padding:11px;border-radius:8px;border:2px solid #93c5fd;background:#dbeafe;color:#1e40af;font-size:13px;font-weight:600;cursor:pointer">🏦 Transferencia</button>
+        <button type="button" id="mac-tab-efectivo" onclick="setMacMpago('EFECTIVO')" style="flex:1;min-width:140px;padding:11px;border-radius:8px;border:2px solid #ddd;background:#f5f5f7;color:#666;font-size:13px;font-weight:600;cursor:pointer">💵 Efectivo</button>
       </div>
-      <div class="fl full"><label>Fecha</label><input type="date" id="mac-fecha"></div>
+      <input type="hidden" id="mac-mpago" value="TRANSFERENCIA">
+    </div>
+    <div class="fl" id="mac-banco-wrap" style="margin-bottom:12px">
+      <label>Banco destino</label>
+      <select id="mac-banco">
+        <option value="">— Seleccionar —</option>
+        <option>Banco de Chile</option><option>BancoEstado</option><option>Santander</option>
+        <option>BCI</option><option>Itaú</option><option>Scotiabank</option><option>Mercado Pago</option><option>Otro</option>
+      </select>
+    </div>
+    <div class="fl" id="mac-boleta-wrap" style="margin-bottom:12px;display:none">
+      <label>N° de boleta</label>
+      <input type="text" id="mac-boleta" placeholder="Ej: 4521" inputmode="numeric">
     </div>
     <div style="font-size:11px;color:#888;margin-top:-6px;margin-bottom:8px">Se aplicará automáticamente a las facturas más antiguas primero (FIFO).</div>
     <div id="mac-preview" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;margin-top:12px;font-size:12px;color:#166534;display:none">
@@ -1456,6 +1501,12 @@ var fechaInvDesde = localStorage.getItem('papelon_fecha_inv_desde') || '';
 var META_VENTA = parseFloat(localStorage.getItem('papelon_meta_venta')||'0') || 0;
 var WSP_TEMPLATES = safeParse('papelon_wsp_templates','{"sin":"Hola {{cliente}}, te escribo de Papelón. Notamos que no nos pediste producto este mes. ¿Necesitás reposición? Cualquier cosa avisame!","bajaron":"Hola {{cliente}}, te escribo de Papelón. ¿Cómo va todo? Vi que esta vez hiciste un pedido más chico, si necesitás algo más avisame.","ausentes":"Hola {{cliente}}, te escribo de Papelón. ¡Hace rato que no nos vemos! ¿Cómo va el negocio? Si necesitás producto, acá estamos."}');
 var WSP_COD_PAIS = localStorage.getItem('papelon_wsp_pais') || '56';
+var WSP_RUBEN_TEL = localStorage.getItem('papelon_rub_tel') || '+56948679298';
+var LIMITE_BLOQUEO = parseInt(localStorage.getItem('papelon_limite_bloqueo')||'3',10) || 3;
+var DIAS_MIN_COBRO = parseInt(localStorage.getItem('papelon_dias_min_cobro')||'5',10);
+if (isNaN(DIAS_MIN_COBRO) || DIAS_MIN_COBRO < 0) DIAS_MIN_COBRO = 5;
+var creditosAprobados = safeParse('papelon_credito_aprobado','[]');
+var noCobraRuben = safeParse('papelon_no_cobra_ruben','[]');
 var comunas = safeParse('papelon_comunas','[]');
 var PRODUCTOS = [
   {key:'l500', lbl:'Limón 500ml',   short:'L500'},
@@ -1528,9 +1579,6 @@ function noficial(nombre) {
       if (_normNombre(aliases[j]) === n) return grupos[i].oficial;
     }
   }
-  // BUG-FIX: devolver el nombre NORMALIZADO (no el original con casing/espacios/acentos variables).
-  // Asi dos ventas del mismo cliente con casing distinto quedan agrupadas como una sola
-  // y no aparecen falsamente en 'Clientes sin comprar este periodo'.
   return n;
 }
 
@@ -1665,6 +1713,25 @@ function cargarTodo() {
       precios = data.precios;
       localStorage.setItem('papelon_precios', JSON.stringify(precios));
     }
+    if (Array.isArray(data.kv)) {
+      data.kv.forEach(function(row){
+        if (!row || !row.key) return;
+        var raw = row.value;
+        if (row.key === 'creditosAprobados') {
+          try { var arr = typeof raw === 'string' ? JSON.parse(raw) : raw; if (Array.isArray(arr)) { creditosAprobados = arr; localStorage.setItem('papelon_credito_aprobado', JSON.stringify(arr)); } } catch(e){}
+        } else if (row.key === 'noCobraRuben') {
+          try { var arr2 = typeof raw === 'string' ? JSON.parse(raw) : raw; if (Array.isArray(arr2)) { noCobraRuben = arr2; localStorage.setItem('papelon_no_cobra_ruben', JSON.stringify(arr2)); } } catch(e){}
+        } else if (row.key === 'LIMITE_BLOQUEO') {
+          var n = parseInt(raw, 10); if (!isNaN(n) && n > 0) { LIMITE_BLOQUEO = n; localStorage.setItem('papelon_limite_bloqueo', String(n)); }
+        } else if (row.key === 'WSP_RUBEN_TEL') {
+          if (raw) { WSP_RUBEN_TEL = String(raw); localStorage.setItem('papelon_rub_tel', WSP_RUBEN_TEL); }
+        } else if (row.key === 'META_VENTA') {
+          var meta = parseFloat(raw); if (!isNaN(meta) && meta >= 0) { META_VENTA = meta; localStorage.setItem('papelon_meta_venta', String(meta)); }
+        } else if (row.key === 'DIAS_MIN_COBRO') {
+          var dm = parseInt(raw, 10); if (!isNaN(dm) && dm >= 0) { DIAS_MIN_COBRO = dm; localStorage.setItem('papelon_dias_min_cobro', String(dm)); }
+        }
+      });
+    }
 
     // Refrescar selects/lists dependientes de ventas
     var nombres = [];
@@ -1755,9 +1822,248 @@ function vals() {
           m500:get('m500'),pm500:pr('pm500'),m900:get('m900'),pm900:pr('pm900'),m18:get('m18'),pm18:pr('pm18')};
 }
 
+function tieneCreditoAprobado(nombreCliente) {
+  if (!nombreCliente) return false;
+  var n = noficial(nombreCliente);
+  if (creditosAprobados && creditosAprobados.indexOf(n) !== -1) return true;
+  for (var i=0; i<clientes.length; i++) {
+    var c = clientes[i];
+    if (c && c.nombre && noficial(c.nombre) === n && c.creditoAprobado) return true;
+  }
+  return false;
+}
+
+function marcarCreditoAprobadoRapido(nombreCliente) {
+  if (!nombreCliente) return;
+  var n = noficial(nombreCliente);
+  if (!confirm('¿Aprobar crédito a "' + n + '"?')) return;
+  if (creditosAprobados.indexOf(n) === -1) creditosAprobados.push(n);
+  localStorage.setItem('papelon_credito_aprobado', JSON.stringify(creditosAprobados));
+  saveKVToSheets('creditosAprobados', creditosAprobados);
+  for (var i=0; i<clientes.length; i++) {
+    if (clientes[i] && noficial(clientes[i].nombre||'') === n) {
+      clientes[i].creditoAprobado = true;
+      localStorage.setItem('papelon_clientes', JSON.stringify(clientes));
+      break;
+    }
+  }
+  rPanel();
+  showToast('✅ Crédito aprobado para ' + n);
+}
+
+function quitarCreditoAprobadoRapido(nombreCliente) {
+  if (!nombreCliente) return;
+  var n = noficial(nombreCliente);
+  if (!confirm('¿Quitar el crédito aprobado a "' + n + '"?')) return;
+  var idx = creditosAprobados.indexOf(n);
+  if (idx !== -1) creditosAprobados.splice(idx,1);
+  localStorage.setItem('papelon_credito_aprobado', JSON.stringify(creditosAprobados));
+  saveKVToSheets('creditosAprobados', creditosAprobados);
+  for (var i=0; i<clientes.length; i++) {
+    if (clientes[i] && noficial(clientes[i].nombre||'') === n && clientes[i].creditoAprobado) {
+      clientes[i].creditoAprobado = false;
+      localStorage.setItem('papelon_clientes', JSON.stringify(clientes));
+      break;
+    }
+  }
+  rPanel();
+  showToast('Crédito revocado para ' + n);
+}
+
+function cobraRuben(nombreCliente) {
+  if (!nombreCliente) return true;
+  var n = noficial(nombreCliente);
+  return (noCobraRuben || []).indexOf(n) === -1;
+}
+
+function toggleCobraRuben(nombreCliente) {
+  if (!nombreCliente) return;
+  var n = noficial(nombreCliente);
+  if (!noCobraRuben) noCobraRuben = [];
+  var idx = noCobraRuben.indexOf(n);
+  if (idx === -1) { noCobraRuben.push(n); showToast('🚫 ' + n + ' ya no es de Rubén'); }
+  else { noCobraRuben.splice(idx, 1); showToast('👤 ' + n + ' lo cobra Rubén'); }
+  localStorage.setItem('papelon_no_cobra_ruben', JSON.stringify(noCobraRuben));
+  saveKVToSheets('noCobraRuben', noCobraRuben);
+  rCobros();
+  rPanel();
+}
+
+function clientesBloqueados() {
+  var byC = {};
+  ventas.forEach(function(v){
+    if (v.estado !== 'PAGADO' && getSaldo(v) > 0) {
+      var n = noficial(v.cliente);
+      if (tieneCreditoAprobado(n)) return;
+      if (!byC[n]) byC[n] = { oficial:n, count:0, deuda:0, vencidas:0, ventas:[] };
+      byC[n].count++;
+      byC[n].deuda += getSaldo(v);
+      var dias = v.fechaLimite ? diasHasta(v.fechaLimite) : null;
+      if (dias !== null && dias < 0) byC[n].vencidas++;
+      byC[n].ventas.push(v);
+    }
+  });
+  var lim = LIMITE_BLOQUEO || 3;
+  var arr = Object.values(byC).filter(function(c){ return c.count >= lim; });
+  arr.sort(function(a,b){ return b.deuda - a.deuda; });
+  return arr;
+}
+
+function clientesAprobadosActivos() {
+  var byC = {};
+  ventas.forEach(function(v){
+    if (v.estado !== 'PAGADO' && getSaldo(v) > 0) {
+      var n = noficial(v.cliente);
+      if (!tieneCreditoAprobado(n)) return;
+      if (!byC[n]) byC[n] = { oficial:n, count:0, deuda:0 };
+      byC[n].count++;
+      byC[n].deuda += getSaldo(v);
+    }
+  });
+  var arr = Object.values(byC);
+  arr.sort(function(a,b){return b.deuda - a.deuda;});
+  return arr;
+}
+
+function estaBloqueado(nombreCliente) {
+  if (!nombreCliente) return null;
+  var n = noficial(nombreCliente);
+  var bloq = clientesBloqueados();
+  for (var i=0; i<bloq.length; i++) {
+    if (bloq[i].oficial === n) return bloq[i];
+  }
+  return null;
+}
+
+function buildMsgBloqueados() {
+  var bloq = clientesBloqueados();
+  var hoyTxt = new Date().toLocaleDateString('es-CL');
+  var msg = '*🍋 PAPELÓN — NO DESPACHAR*\n📅 ' + hoyTxt + '\n\n';
+  if (bloq.length === 0) {
+    msg += '✅ Sin clientes bloqueados.';
+  } else {
+    msg += '⛔ Estos clientes tienen ' + LIMITE_BLOQUEO + '+ facturas sin pagar.\nNO entregar mercadería hasta que abonen.\n\n';
+    bloq.forEach(function(c,i){
+      msg += (i+1) + '. *' + c.oficial + '*\n   ' + c.count + ' facturas';
+      if (c.vencidas > 0) msg += ' (' + c.vencidas + ' vencidas)';
+      msg += '\n   Deuda: ' + fmt(c.deuda) + '\n\n';
+    });
+    var totalBloq = bloq.reduce(function(s,c){return s+c.deuda;},0);
+    msg += '━━━━━━━━━━━━━━━━━\n💵 Total bloqueado: *' + fmt(totalBloq) + '*';
+  }
+  return msg;
+}
+
+function copiarAlPortapapeles(texto, descripcion) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(function(){
+      showToast('✅ ' + (descripcion||'Mensaje') + ' copiado. Pegalo en WhatsApp con Ctrl+V');
+    }).catch(function(){
+      _copiarFallback(texto, descripcion);
+    });
+  } else {
+    _copiarFallback(texto, descripcion);
+  }
+}
+
+function _copiarFallback(texto, descripcion) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✅ ' + (descripcion||'Mensaje') + ' copiado al portapapeles');
+  } catch(err) {
+    showToast('⚠️ No se pudo copiar. Tu navegador no lo permite.');
+  }
+}
+
+function enviarBloqueadosWhatsApp() {
+  if (!WSP_RUBEN_TEL) { showToast('⚠️ Falta WhatsApp de Rubén en Config'); return; }
+  var msg = buildMsgBloqueados();
+  var tel = String(WSP_RUBEN_TEL).replace(/[^0-9]/g,'');
+  // Copiar al portapapeles primero (por si la ventana de WhatsApp Web no permite enviar texto largo)
+  if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
+  // Abrir WhatsApp Web directo, con nombre de ventana fijo para reutilizar la misma pestaña
+  var url = 'https://web.whatsapp.com/send?phone='+tel+'&text='+encodeURIComponent(msg);
+  window.open(url, 'papelon_whatsapp_ruben');
+  showToast('📱 Mensaje copiado al portapapeles también. Si no se envía solo, pegá con Ctrl+V en el chat.');
+}
+
+function copiarBloqueadosWhatsApp() {
+  copiarAlPortapapeles(buildMsgBloqueados(), 'Mensaje "NO DESPACHAR"');
+}
+
+function buildMsgPorCobrar() {
+  var hoyD = new Date(); hoyD.setHours(0,0,0,0);
+  var byC = {};
+  ventas.forEach(function(v){
+    if (v.estado !== 'PAGADO' && getSaldo(v) > 0) {
+      var n = noficial(v.cliente);
+      if (!cobraRuben(n)) return;
+      if (!byC[n]) byC[n] = { oficial:n, count:0, deuda:0, vencidas:0, diasMasViejo:0 };
+      byC[n].count++;
+      byC[n].deuda += getSaldo(v);
+      var dias = v.fechaLimite ? diasHasta(v.fechaLimite) : null;
+      if (dias !== null && dias < 0) byC[n].vencidas++;
+      var fIso = fechaISO(v.fecha);
+      if (fIso) {
+        var diasDesde = Math.floor((hoyD - new Date(fIso+'T00:00:00'))/86400000);
+        if (diasDesde > byC[n].diasMasViejo) byC[n].diasMasViejo = diasDesde;
+      }
+    }
+  });
+  Object.keys(byC).forEach(function(k){
+    if (byC[k].diasMasViejo < DIAS_MIN_COBRO) delete byC[k];
+  });
+  var lista = Object.values(byC).sort(function(a,b){
+    if ((b.vencidas>0) !== (a.vencidas>0)) return (b.vencidas>0)?1:-1;
+    return b.deuda - a.deuda;
+  });
+  var hoyTxt = new Date().toLocaleDateString('es-CL');
+  var msg = '*🍋 PAPELÓN — POR COBRAR*\n📅 ' + hoyTxt + '\n\n';
+  if (lista.length === 0) {
+    msg += '✅ Nada para cobrar hoy (mín ' + DIAS_MIN_COBRO + ' días desde la factura).';
+  } else {
+    msg += '💰 Clientes con saldo a cobrar (' + lista.length + ')\nMín ' + DIAS_MIN_COBRO + ' días desde la factura. Vencidos primero.\n\n';
+    lista.forEach(function(c,i){
+      msg += (i+1) + '. *' + c.oficial + '*';
+      if (c.vencidas > 0) msg += ' ⚠️';
+      msg += '\n   ' + c.count + ' factura' + (c.count>1?'s':'');
+      if (c.vencidas > 0) msg += ' · ' + c.vencidas + ' vencida' + (c.vencidas>1?'s':'');
+      msg += '\n   Debe: *' + fmt(c.deuda) + '*\n\n';
+    });
+    var total = lista.reduce(function(s,c){return s+c.deuda;},0);
+    msg += '━━━━━━━━━━━━━━━━━\n💵 Total por cobrar: *' + fmt(total) + '*';
+  }
+  return msg;
+}
+
+function enviarPorCobrarWhatsApp() {
+  if (!WSP_RUBEN_TEL) { showToast('⚠️ Falta WhatsApp de Rubén'); return; }
+  var msg = buildMsgPorCobrar();
+  var tel = String(WSP_RUBEN_TEL).replace(/[^0-9]/g,'');
+  if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
+  var url = 'https://web.whatsapp.com/send?phone='+tel+'&text='+encodeURIComponent(msg);
+  window.open(url, 'papelon_whatsapp_ruben');
+  showToast('📱 Mensaje copiado al portapapeles también. Si no se envía solo, pegá con Ctrl+V en el chat.');
+}
+
+function copiarPorCobrarWhatsApp() {
+  copiarAlPortapapeles(buildMsgPorCobrar(), 'Mensaje "POR COBRAR"');
+}
+
 function guardar() {
   var cli = document.getElementById('n-cliente').value.trim().toUpperCase();
   if (!cli) { showToast('Ingresá el nombre del cliente'); return; }
+  var bloqueado = estaBloqueado(cli);
+  if (bloqueado) {
+    alert('⛔ CLIENTE BLOQUEADO\n\n'+bloqueado.oficial+' tiene '+bloqueado.count+' facturas sin pagar'+(bloqueado.vencidas>0?' ('+bloqueado.vencidas+' vencidas)':'')+'\nDeuda total: '+fmt(bloqueado.deuda)+'\n\nNo se puede cargar nuevas ventas hasta que abone.');
+    return;
+  }
   var v = vals();
   var total = v.l500*v.pl500+v.l900*v.pl900+v.l18*v.pl18+v.m500*v.pm500+v.m900*v.pm900+v.m18*v.pm18;
   if (!total) { showToast('Ingresá al menos un producto'); return; }
@@ -1822,7 +2128,18 @@ function limpiar() {
   document.getElementById('n-mpago-abono').value='TRANSFERENCIA';
   document.getElementById('n-dias-credito').value='';
   document.getElementById('n-dias-credito2').value='';
-  document.getElementById('n-fecha').value=hoy();
+  (function(){
+  if (!creditosAprobados) creditosAprobados = [];
+  for (var i=0; i<clientes.length; i++) {
+    var c = clientes[i];
+    if (c && c.creditoAprobado && c.nombre) {
+      var n = noficial(c.nombre);
+      if (creditosAprobados.indexOf(n) === -1) creditosAprobados.push(n);
+    }
+  }
+  localStorage.setItem('papelon_credito_aprobado', JSON.stringify(creditosAprobados));
+})();
+document.getElementById('n-fecha').value=hoy();
   document.getElementById('n-fecha-pago').value=hoy();
   document.getElementById('n-fecha-abono').value=hoy();
   setTab('pagado');
@@ -1901,17 +2218,155 @@ function renderMetaProgreso(){
     '</div>';
 }
 
+function renderBloqueadosCard() {
+  var el = document.getElementById('bloqueados-card');
+  if (!el) return;
+  var bloq = clientesBloqueados();
+  var aprob = clientesAprobadosActivos();
+  var byC = {};
+  var hoyD_pc = new Date(); hoyD_pc.setHours(0,0,0,0);
+  ventas.forEach(function(v){
+    if (v.estado !== 'PAGADO' && getSaldo(v) > 0) {
+      var n = noficial(v.cliente);
+      if (!cobraRuben(n)) return;
+      if (!byC[n]) byC[n] = {diasMasViejo: 0};
+      var fIso = fechaISO(v.fecha);
+      if (fIso) {
+        var diasDesde = Math.floor((hoyD_pc - new Date(fIso+'T00:00:00'))/86400000);
+        if (diasDesde > byC[n].diasMasViejo) byC[n].diasMasViejo = diasDesde;
+      }
+    }
+  });
+  Object.keys(byC).forEach(function(k){ if (byC[k].diasMasViejo < DIAS_MIN_COBRO) delete byC[k]; });
+  var nPorCobrar = Object.keys(byC).length;
+  var botonesWsp =
+    '<div style="margin-top:10px">'+
+      '<div style="font-size:11px;color:#666;margin-bottom:4px">📱 Enviar por WhatsApp a Rubén:</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button class="btn-sec" onclick="enviarBloqueadosWhatsApp()" style="background:#25D366;color:white;border:none;font-weight:600;padding:9px 12px;flex:1;min-width:140px">📱 NO DESPACHAR ('+bloq.length+')</button>'+
+        '<button class="btn-sec" onclick="copiarBloqueadosWhatsApp()" title="Copiar mensaje al portapapeles" style="background:white;color:#15803d;border:1px solid #15803d;font-weight:600;padding:9px 12px">📋 Copiar</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+
+        '<button class="btn-sec" onclick="enviarPorCobrarWhatsApp()" style="background:#128C7E;color:white;border:none;font-weight:600;padding:9px 12px;flex:1;min-width:140px">💰 POR COBRAR ('+nPorCobrar+')</button>'+
+        '<button class="btn-sec" onclick="copiarPorCobrarWhatsApp()" title="Copiar mensaje al portapapeles" style="background:white;color:#0f766e;border:1px solid #0f766e;font-weight:600;padding:9px 12px">📋 Copiar</button>'+
+      '</div>'+
+    '</div>';
+  var html = '';
+  if (!bloq.length) {
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:14px">'+
+      '<div style="font-size:13px;color:#15803d"><strong>✅ Sin clientes bloqueados.</strong> Todos están bajo el límite de '+LIMITE_BLOQUEO+' facturas.</div>'+
+      botonesWsp+'</div>';
+  } else {
+    var totalDeuda = bloq.reduce(function(s,c){return s+c.deuda;},0);
+    var rows = bloq.map(function(c){
+      var venc = c.vencidas>0 ? ' <span style="background:#dc2626;color:white;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600">'+c.vencidas+' vencidas</span>' : '';
+      var nameEsc = c.oficial.replace(/'/g,"\\'");
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #fecaca;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:160px"><div style="font-size:14px;font-weight:600;color:#991b1b">'+c.oficial+venc+'</div>'+
+        '<div style="font-size:11px;color:#7f1d1d;margin-top:2px">'+c.count+' facturas sin pagar</div></div>'+
+        '<div style="text-align:right;font-size:14px;font-weight:700;color:#991b1b;white-space:nowrap">'+fmt(c.deuda)+'</div>'+
+        '<button onclick="marcarCreditoAprobadoRapido(\''+nameEsc+'\')" title="Aprobar crédito" style="background:#16a34a;color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">✓ Crédito OK</button>'+
+        '</div>';
+    }).join('');
+    html += '<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px">'+
+      '<div style="font-size:16px;font-weight:700;color:#991b1b">⛔ '+bloq.length+' cliente'+(bloq.length>1?'s':'')+' BLOQUEADO'+(bloq.length>1?'S':'')+'</div>'+
+      '<div style="font-size:11px;color:#7f1d1d;margin-top:2px;margin-bottom:8px">'+LIMITE_BLOQUEO+'+ facturas sin pagar — no se les puede vender hasta que abonen</div>'+
+      rows +
+      '<div style="display:flex;justify-content:space-between;padding-top:10px;margin-top:6px;border-top:2px solid #dc2626;font-weight:700;color:#991b1b"><span>Total deuda bloqueada</span><span>'+fmt(totalDeuda)+'</span></div>'+
+      botonesWsp+'</div>';
+  }
+  if (aprob.length > 0) {
+    var rowsA = aprob.map(function(c){
+      var nameEsc = c.oficial.replace(/'/g,"\\'");
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #d1fae5;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:140px"><div style="font-size:13px;font-weight:600;color:#15803d">'+c.oficial+'</div>'+
+        '<div style="font-size:10px;color:#15803d">'+c.count+' fac. pendiente'+(c.count>1?'s':'')+'</div></div>'+
+        '<div style="text-align:right;font-size:12px;font-weight:600;color:#15803d;white-space:nowrap">'+fmt(c.deuda)+'</div>'+
+        '<button onclick="quitarCreditoAprobadoRapido(\''+nameEsc+'\')" title="Revocar" style="background:white;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap">✕ Revocar</button>'+
+        '</div>';
+    }).join('');
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:14px">'+
+      '<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:6px">✓ Con crédito aprobado ('+aprob.length+')</div>'+
+      '<div style="font-size:11px;color:#15803d;margin-bottom:6px">Tienen deuda pero NO se bloquean. Despachables.</div>'+
+      rowsA + '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderVentasMesCard() {
+  var el = document.getElementById('ventas-mes-card');
+  if (!el) return;
+  var hoyD = new Date();
+  var anio = hoyD.getFullYear();
+  var mes = hoyD.getMonth();
+  var meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var primerDia = new Date(anio, mes, 1).toISOString().slice(0,10);
+  var ultimoDia = new Date(anio, mes+1, 0).toISOString().slice(0,10);
+  var anteriorAnio = mes === 0 ? anio - 1 : anio;
+  var anteriorMes = mes === 0 ? 11 : mes - 1;
+  var primerDiaAnt = new Date(anteriorAnio, anteriorMes, 1).toISOString().slice(0,10);
+  var ultimoDiaAnt = new Date(anteriorAnio, anteriorMes+1, 0).toISOString().slice(0,10);
+  var vMes = ventas.filter(function(v){var f=fechaISO(v.fecha); return f >= primerDia && f <= ultimoDia;});
+  var totalMes = vMes.reduce(function(s,v){return s+Number(v.total)||0;},0);
+  var nFacturasMes = vMes.length;
+  var ticketProm = nFacturasMes ? totalMes/nFacturasMes : 0;
+  var cobradoMes = vMes.filter(function(v){return v.estado==='PAGADO';}).reduce(function(s,v){return s+Number(v.total)||0;},0);
+  var porCobrarMes = vMes.filter(function(v){return v.estado!=='PAGADO';}).reduce(function(s,v){return s+getSaldo(v);},0);
+  var vMesAnt = ventas.filter(function(v){var f=fechaISO(v.fecha); return f >= primerDiaAnt && f <= ultimoDiaAnt;});
+  var totalMesAnt = vMesAnt.reduce(function(s,v){return s+Number(v.total)||0;},0);
+  var diaHoy = hoyD.getDate();
+  var hastaDiaAnt = new Date(anteriorAnio, anteriorMes, Math.min(diaHoy, new Date(anteriorAnio, anteriorMes+1, 0).getDate())).toISOString().slice(0,10);
+  var totalMesAntMismoDia = vMesAnt.filter(function(v){var f=fechaISO(v.fecha); return f <= hastaDiaAnt;}).reduce(function(s,v){return s+Number(v.total)||0;},0);
+  var delta = totalMesAntMismoDia > 0 ? ((totalMes - totalMesAntMismoDia) / totalMesAntMismoDia) * 100 : null;
+  var deltaTxt = '';
+  if (delta !== null) {
+    if (delta > 0.5) deltaTxt = '<span style="color:#15803d;font-weight:600">⬆ +'+delta.toFixed(1)+'% vs '+meses[anteriorMes]+' al día '+diaHoy+'</span>';
+    else if (delta < -0.5) deltaTxt = '<span style="color:#b91c1c;font-weight:600">⬇ '+delta.toFixed(1)+'% vs '+meses[anteriorMes]+' al día '+diaHoy+'</span>';
+    else deltaTxt = '<span style="color:#666">≈ igual que '+meses[anteriorMes]+'</span>';
+  } else if (totalMesAnt === 0) {
+    deltaTxt = '<span style="color:#888">Sin datos de '+meses[anteriorMes]+'</span>';
+  }
+  var ultimoDiaNum = new Date(anio, mes+1, 0).getDate();
+  var diasRestantes = ultimoDiaNum - diaHoy;
+  var promDiario = diaHoy > 0 ? totalMes / diaHoy : 0;
+  var proyeccionFinMes = promDiario * ultimoDiaNum;
+  el.innerHTML =
+    '<div style="background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%);border:1px solid #86efac;border-radius:14px;padding:16px 20px;margin-bottom:14px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+        '<div><div style="font-size:12px;color:#15803d;text-transform:uppercase;font-weight:600;letter-spacing:0.5px">📅 Vendido en '+meses[mes]+' '+anio+'</div>'+
+        '<div style="font-size:30px;font-weight:800;color:#14532d;margin-top:4px;line-height:1">'+fmt(totalMes)+'</div>'+
+        '<div style="font-size:12px;color:#166534;margin-top:4px">'+nFacturasMes+' factura'+(nFacturasMes!==1?'s':'')+' · Ticket promedio '+fmt(ticketProm)+'</div>'+
+        (deltaTxt?'<div style="font-size:12px;margin-top:6px">'+deltaTxt+'</div>':'')+'</div>'+
+        '<div style="text-align:right;min-width:140px">'+
+        '<div style="font-size:11px;color:#15803d;text-transform:uppercase;font-weight:600">Día '+diaHoy+' de '+ultimoDiaNum+'</div>'+
+        '<div style="font-size:11px;color:#166534;margin-top:2px">Faltan '+diasRestantes+' días</div>'+
+        '<div style="font-size:11px;color:#166534;margin-top:6px">Prom/día: <strong>'+fmt(promDiario)+'</strong></div>'+
+        '<div style="font-size:11px;color:#166534;margin-top:2px">Proyección:<br><strong>'+fmt(proyeccionFinMes)+'</strong></div></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:140px;background:rgba(255,255,255,0.7);padding:8px 12px;border-radius:8px">'+
+        '<div style="font-size:11px;color:#15803d;text-transform:uppercase">Cobrado del mes</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#14532d">'+fmt(cobradoMes)+'</div></div>'+
+        '<div style="flex:1;min-width:140px;background:rgba(255,255,255,0.7);padding:8px 12px;border-radius:8px">'+
+        '<div style="font-size:11px;color:#b91c1c;text-transform:uppercase">Por cobrar del mes</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#991b1b">'+fmt(porCobrarMes)+'</div></div>'+
+      '</div></div>';
+}
+
 function rPanel() {
   verificarAlertas();
+  renderVentasMesCard();
   renderMetaProgreso();
+  renderBloqueadosCard();
   var pend = ventas.filter(function(v){return v.estado==='NO PAGO'&&getSaldo(v)>0;});
   var pagTotal = ventas.filter(function(v){return v.estado==='PAGADO';}).reduce(function(s,v){return s+Number(v.total);},0);
   var tPend = pend.reduce(function(s,v){return s+getSaldo(v);},0);
+  var totalFacturadoHist = ventas.reduce(function(s,v){return s+Number(v.total)||0;},0);
   document.getElementById('st').innerHTML =
-    '<div class="stat"><div class="stat-label">Ventas totales</div><div class="stat-value">'+ventas.length+'</div></div>'+
+    '<div class="stat" style="border-left:4px solid #16a34a"><div class="stat-label">📊 Total facturado</div><div class="stat-value">'+fmt(totalFacturadoHist)+'</div><div class="stat-sub">'+ventas.length+' ventas desde el inicio</div></div>'+
     '<div class="stat"><div class="stat-label">Cobrado</div><div class="stat-value">'+fmt(pagTotal)+'</div><div class="stat-sub">'+ventas.filter(function(v){return v.estado==='PAGADO';}).length+' ventas</div></div>'+
     '<div class="stat"><div class="stat-label">Por cobrar</div><div class="stat-value">'+fmt(tPend)+'</div><div class="stat-sub">'+pend.length+' pendientes</div></div>'+
-    '<div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value">'+fmt(ventas.length?ventas.reduce(function(s,v){return s+Number(v.total);},0)/ventas.length:0)+'</div></div>';
+    '<div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value">'+fmt(ventas.length?totalFacturadoHist/ventas.length:0)+'</div></div>';
   var byC = {};
   pend.forEach(function(v){var n=noficial(v.cliente);byC[n]=(byC[n]||0)+getSaldo(v);});
   var top10 = Object.entries(byC).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
@@ -2002,88 +2457,46 @@ function setEditEstado(val) {
 function eliminarVenta(id){
   var v = ventas.find(function(x){return String(x.id) == String(id);});
   if (!v) { showToast('Venta no encontrada'); return; }
-  var msg = '⚠️ ¿Eliminar esta venta?\n\n'+
-    'Cliente: '+noficial(v.cliente)+'\n'+
-    'Fecha: '+fmtF(v.fecha)+'\n'+
-    'Talonario: '+(v.talon||'—')+'\n'+
-    'Total: '+fmt(v.total)+'\n\n'+
-    'Esto también borra sus abonos asociados. Esta acción NO se puede deshacer.';
+  var msg = '⚠️ ¿Eliminar esta venta?\n\nCliente: '+noficial(v.cliente)+'\nFecha: '+fmtF(v.fecha)+'\nTalonario: '+(v.talon||'—')+'\nTotal: '+fmt(v.total)+'\n\nEsto también borra sus abonos asociados. Esta acción NO se puede deshacer.';
   if (!confirm(msg)) return;
   var idx = ventas.findIndex(function(x){return String(x.id) == String(id);});
   if (idx >= 0) ventas.splice(idx, 1);
-  if (abonos[id]) {
-    delete abonos[id];
-    localStorage.setItem('papelon_abonos', JSON.stringify(abonos));
-  }
+  if (abonos[id]) { delete abonos[id]; localStorage.setItem('papelon_abonos', JSON.stringify(abonos)); }
   renderT(); rPanel(); rCobros();
   showToast('Eliminando venta...');
   if (SCRIPT_URL) {
     apiGet({action:'deleteVenta', id:id}).then(function(res){
-      if (res && res.ok) {
-        return apiGet({action:'deleteAbonosVenta', ventaId:id});
-      } else {
-        throw new Error((res&&res.error)||'Error al borrar');
-      }
-    }).then(function(){
-      showToast('✅ Venta eliminada');
-    }).catch(function(err){
-      showToast('⚠️ Error al borrar: '+(err.message||'desconocido')+'. Recargá la página.');
-    });
+      if (res && res.ok) return apiGet({action:'deleteAbonosVenta', ventaId:id});
+      throw new Error((res&&res.error)||'Error');
+    }).then(function(){ showToast('✅ Venta eliminada'); }).catch(function(err){ showToast('⚠️ Error: '+(err.message||'desconocido')); });
   }
 }
 
 function abrirEditar(ventaId) {
   try {
-    console.log('[abrirEditar] llamado con id=', ventaId, 'tipo=', typeof ventaId);
     var v = ventas.find(function(x){return String(x.id)==String(ventaId);});
-    if (!v) {
-      console.warn('[abrirEditar] venta no encontrada. ID buscado:', ventaId, 'IDs disponibles (primeros 5):', ventas.slice(0,5).map(function(z){return z.id;}));
-      showToast('⚠️ No se encontró la venta (id=' + ventaId + '). Recargá la página.');
-      return;
-    }
+    if (!v) { showToast('⚠️ No se encontró la venta'); return; }
     editVentaId = ventaId;
     var modal = document.getElementById('modal-editar');
-    if (!modal) { showToast('⚠️ Modal de edición no encontrado en el HTML.'); return; }
-    var sv = function(id, val){
-      var el = document.getElementById(id);
-      if (el) el.value = val;
-      else console.warn('[abrirEditar] falta elemento:', id);
-    };
-    sv('edit-cliente', v.cliente||'');
-    sv('edit-fecha-venta', v.fecha||'');
-    sv('edit-talon', v.talon||'');
-    sv('edit-factura', v.factura||'');
-    sv('edit-l500', v.l500||0);
-    sv('edit-l900', v.l900||0);
-    sv('edit-l18',  v.l18||0);
-    sv('edit-m500', v.m500||0);
-    sv('edit-m900', v.m900||0);
-    sv('edit-m18',  v.m18||0);
-    var pBase = (typeof precios !== 'undefined' && precios) ? precios : {};
-    sv('edit-pl500', v.pl500||pBase.l500||995);
-    sv('edit-pl900', v.pl900||pBase.l900||1495);
-    sv('edit-pl18',  v.pl18 ||pBase.l18 ||2670);
-    sv('edit-pm500', v.pm500||pBase.m500||995);
-    sv('edit-pm900', v.pm900||pBase.m900||1495);
-    sv('edit-pm18',  v.pm18 ||pBase.m18 ||2670);
+    if (!modal) { showToast('⚠️ Modal no encontrado'); return; }
+    var sv = function(id, val){ var el = document.getElementById(id); if (el) el.value = val; };
+    sv('edit-cliente', v.cliente||''); sv('edit-fecha-venta', v.fecha||'');
+    sv('edit-talon', v.talon||''); sv('edit-factura', v.factura||'');
+    sv('edit-l500', v.l500||0); sv('edit-l900', v.l900||0); sv('edit-l18', v.l18||0);
+    sv('edit-m500', v.m500||0); sv('edit-m900', v.m900||0); sv('edit-m18', v.m18||0);
+    var pB = (typeof precios !== 'undefined' && precios) ? precios : {};
+    sv('edit-pl500', v.pl500||pB.l500||995); sv('edit-pl900', v.pl900||pB.l900||1495); sv('edit-pl18', v.pl18||pB.l18||2670);
+    sv('edit-pm500', v.pm500||pB.m500||995); sv('edit-pm900', v.pm900||pB.m900||1495); sv('edit-pm18', v.pm18||pB.m18||2670);
     editPrecioEspActivo = false;
     if (typeof actualizarBotonEditPrecioEsp === 'function') actualizarBotonEditPrecioEsp();
-    var elT = document.getElementById('modal-edit-titulo');
-    if (elT) elT.textContent = noficial(v.cliente)+' · Talonario '+(v.talon||'—');
-    var elI = document.getElementById('modal-edit-info');
-    if (elI) elI.textContent = fmtF(v.fecha)+' · '+fmt(v.total)+' · Factura: '+(v.factura||'S/F');
+    var elT = document.getElementById('modal-edit-titulo'); if (elT) elT.textContent = noficial(v.cliente)+' · '+(v.talon||'—');
+    var elI = document.getElementById('modal-edit-info'); if (elI) elI.textContent = fmtF(v.fecha)+' · '+fmt(v.total);
     if (typeof setEditEstado === 'function') setEditEstado('PAGADO');
-    sv('edit-mpago', v.mpago||'TRANSFERENCIA');
-    sv('edit-fecha-pago', hoy());
-    sv('edit-banco', v.banco||'');
-    sv('edit-monto-abono', '');
+    sv('edit-mpago', v.mpago||'TRANSFERENCIA'); sv('edit-fecha-pago', hoy());
+    sv('edit-banco', v.banco||''); sv('edit-monto-abono', '');
     if (typeof setEditTab === 'function') setEditTab('datos');
     modal.classList.add('show');
-    console.log('[abrirEditar] modal abierto OK para venta id=', ventaId);
-  } catch (err) {
-    console.error('[abrirEditar] ERROR:', err);
-    showToast('⚠️ Error al abrir editor: ' + (err.message||err) + '. Revisá la consola (F12).');
-  }
+  } catch(err){ showToast('⚠️ Error al abrir: '+(err.message||err)); }
 }
 
 function setEditTab(tab){
@@ -2319,11 +2732,18 @@ function rCobros() {
     var diasVieja = fechaVieja ? Math.floor((new Date() - new Date(fechaISO(fechaVieja)+'T00:00:00'))/86400000) : 0;
     var bColor = diasVieja > 90 ? '#7f1d1d' : (diasVieja > 60 ? '#dc2626' : (diasVieja > 30 ? '#92400e' : '#15803d'));
     var bLabel = diasVieja > 90 ? '90+ días' : (diasVieja > 60 ? '61-90 días' : (diasVieja > 30 ? '31-60 días' : '0-30 días'));
+    var esDeRuben = cobraRuben(cli);
+    var nameEscC = cli.replace(/'/g,"\\'");
+    var toggleRuben = esDeRuben
+      ? '<button onclick="event.stopPropagation();toggleCobraRuben(\''+nameEscC+'\')" title="Lo cobra Rubén — clic para excluirlo" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">👤 Lo cobra Rubén</button>'
+      : '<button onclick="event.stopPropagation();toggleCobraRuben(\''+nameEscC+'\')" title="No es de Rubén — clic para incluirlo" style="background:#f5f5f7;color:#666;border:1px solid #ddd;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">🚫 No es de Rubén</button>';
     return '<div class="cob-cli">'+
       '<div class="cob-cli-hdr" onclick="toggleCli(\''+id+'\')">'+
-        '<div><div class="cob-cli-nombre">'+cli+' <span style="display:inline-block;background:'+bColor+';color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin-left:6px">'+bLabel+'</span></div>'+
+        '<div style="flex:1;min-width:0"><div class="cob-cli-nombre">'+cli+' <span style="display:inline-block;background:'+bColor+';color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin-left:6px">'+bLabel+'</span></div>'+
         '<div class="cob-cli-info">'+vs.length+' factura'+(vs.length>1?'s':'')+' · más vieja '+fmtF(fechaVieja)+' ('+diasVieja+'d) · '+(tAb>0?'Abonado '+fmt(tAb)+' ('+pct+'%)':'Sin abonos')+'</div>'+
-        (tAb>0?'<div class="progress-bar" style="margin-top:6px;width:200px"><div class="progress-fill" style="width:'+pct+'%"></div></div>':'')+'</div>'+
+        (tAb>0?'<div class="progress-bar" style="margin-top:6px;width:200px"><div class="progress-fill" style="width:'+pct+'%"></div></div>':'')+
+        '<div style="margin-top:6px">'+toggleRuben+'</div>'+
+        '</div>'+
         '<div style="display:flex;align-items:center;gap:10px"><div class="cob-cli-monto">'+fmt(tSaldoCli)+'</div>'+
         '<div class="cob-chevron" id="chev-'+id+'">▾</div></div>'+
       '</div>'+
@@ -2498,7 +2918,7 @@ function renderClientes() {
     return '<div class="cli-card">'+
       '<div class="cli-card-hdr">'+
         '<div class="cli-avatar">'+c.nombre.slice(0,2)+'</div>'+
-        '<div style="flex:1"><div class="cli-nombre">'+c.nombre+segBadge+'</div><div class="cli-razon">'+(c.razon||'Sin razón social')+'</div></div>'+
+        '<div style="flex:1"><div class="cli-nombre">'+c.nombre+segBadge+(c.creditoAprobado?' <span style="display:inline-block;background:#16a34a;color:white;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;margin-left:6px">✓ CRÉDITO OK</span>':'')+'</div><div class="cli-razon">'+(c.razon||'Sin razón social')+'</div></div>'+
         '<button class="btn-edit" onclick="editarCliente('+i+')">✏️ Editar</button>'+
       '</div>'+
       '<div class="cli-body">'+
@@ -2524,6 +2944,8 @@ function abrirFormCliente(){
   editCliIdx=null;
   ['c-nombre','c-razon','c-rut','c-tel','c-dir','c-email','c-notas','c-pl500','c-pl900','c-pl18','c-pm500','c-pm900','c-pm18'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('c-credito').value='';
+  var caEl = document.getElementById('c-credito-aprobado');
+  if (caEl) caEl.checked = false;
   document.getElementById('c-comuna').value='';
   document.getElementById('c-dia').value='';
   cargarComunasEnFichaCliente();
@@ -2545,6 +2967,8 @@ function editarCliente(i){
   document.getElementById('c-email').value=c.email||'';
   document.getElementById('c-notas').value=c.notas||'';
   document.getElementById('c-credito').value=c.credito||'';
+  var caEl2 = document.getElementById('c-credito-aprobado');
+  if (caEl2) caEl2.checked = !!c.creditoAprobado;
   // Precios especiales
   var pe = c.precios || {};
   ['l500','l900','l18','m500','m900','m18'].forEach(function(k){
@@ -2579,6 +3003,7 @@ function guardarCliente(){
     dia:document.getElementById('c-dia').value,
     email:document.getElementById('c-email').value,
     credito:document.getElementById('c-credito').value,
+    creditoAprobado: !!(document.getElementById('c-credito-aprobado') && document.getElementById('c-credito-aprobado').checked),
     notas:document.getElementById('c-notas').value,
     precios: hayPreciosEsp ? preciosEsp : null
   };
@@ -2591,7 +3016,7 @@ function guardarCliente(){
     action:'saveCliente',
     id: c.id||'',
     nombre: c.nombre, razon: c.razon, rut: c.rut, tel: c.tel, dir: c.dir,
-    comuna: c.comuna, dia: c.dia, email: c.email, credito: c.credito, notas: c.notas,
+    comuna: c.comuna, dia: c.dia, email: c.email, credito: c.credito, notas: c.notas, creditoAprobado: c.creditoAprobado ? 'TRUE' : 'FALSE',
     precios: c.precios ? JSON.stringify(c.precios) : ''
   };
   apiGet(params).then(function(res){
@@ -3330,9 +3755,41 @@ function rConfig(){
   document.getElementById('cfg-meta-venta').value = META_VENTA || '';
   // Plantillas WhatsApp
   document.getElementById('cfg-wsp-pais').value = WSP_COD_PAIS || '56';
+  if (document.getElementById('cfg-limite-bloqueo')) document.getElementById('cfg-limite-bloqueo').value = LIMITE_BLOQUEO || 3;
+  if (document.getElementById('cfg-rub-tel')) document.getElementById('cfg-rub-tel').value = WSP_RUBEN_TEL || '';
+  if (document.getElementById('cfg-dias-min-cobro')) document.getElementById('cfg-dias-min-cobro').value = DIAS_MIN_COBRO;
   document.getElementById('cfg-wsp-sin').value = WSP_TEMPLATES.sin || '';
   document.getElementById('cfg-wsp-bajaron').value = WSP_TEMPLATES.bajaron || '';
   document.getElementById('cfg-wsp-ausentes').value = WSP_TEMPLATES.ausentes || '';
+}
+
+function saveKVToSheets(key, value) {
+  if (!SCRIPT_URL) return;
+  var val = typeof value === 'string' ? value : JSON.stringify(value);
+  apiGet({action:'setKV', key:key, value:val}).catch(function(){});
+}
+
+function guardarControlCredito(){
+  var lim = parseInt(document.getElementById('cfg-limite-bloqueo').value, 10);
+  if (isNaN(lim) || lim < 1) { showToast('Cantidad inválida'); return; }
+  var tel = document.getElementById('cfg-rub-tel').value.trim();
+  LIMITE_BLOQUEO = lim;
+  WSP_RUBEN_TEL = tel;
+  var dEl = document.getElementById('cfg-dias-min-cobro');
+  if (dEl) {
+    var d = parseInt(dEl.value, 10);
+    if (!isNaN(d) && d >= 0 && d <= 60) {
+      DIAS_MIN_COBRO = d;
+      localStorage.setItem('papelon_dias_min_cobro', String(d));
+      saveKVToSheets('DIAS_MIN_COBRO', String(d));
+    }
+  }
+  localStorage.setItem('papelon_limite_bloqueo', String(lim));
+  localStorage.setItem('papelon_rub_tel', tel);
+  saveKVToSheets('LIMITE_BLOQUEO', String(lim));
+  saveKVToSheets('WSP_RUBEN_TEL', tel);
+  showToast('✅ Control guardado. Bloqueo: '+lim+'f · Mín cobro: '+DIAS_MIN_COBRO+'d');
+  rPanel();
 }
 
 function guardarPlantillasWsp(){
@@ -3411,7 +3868,8 @@ function guardarMeta(){
   var v = parseFloat(document.getElementById('cfg-meta-venta').value) || 0;
   META_VENTA = v;
   localStorage.setItem('papelon_meta_venta', String(v));
-  showToast(v > 0 ? '✅ Meta guardada: '+fmt(v) : '✅ Meta borrada');
+  saveKVToSheets('META_VENTA', String(v));
+  showToast(v > 0 ? '✅ Meta guardada y sincronizada: '+fmt(v) : '✅ Meta borrada');
   rPanel();
 }
 
@@ -3657,6 +4115,22 @@ function exportProduccionCSV(){
 // ============= ABONO GENERAL POR CLIENTE (FIFO) =============
 var abonoCliActual = null; // { cli, ventas, deudaTotal }
 
+function setMacMpago(tipo) {
+  document.getElementById('mac-mpago').value = tipo;
+  var esTransfer = tipo === 'TRANSFERENCIA';
+  var esEfectivo = tipo === 'EFECTIVO';
+  var tT = document.getElementById('mac-tab-transfer');
+  tT.style.border = esTransfer ? '2px solid #2563eb' : '2px solid #ddd';
+  tT.style.background = esTransfer ? '#dbeafe' : '#f5f5f7';
+  tT.style.color = esTransfer ? '#1e40af' : '#666';
+  var tE = document.getElementById('mac-tab-efectivo');
+  tE.style.border = esEfectivo ? '2px solid #16a34a' : '2px solid #ddd';
+  tE.style.background = esEfectivo ? '#dcfce7' : '#f5f5f7';
+  tE.style.color = esEfectivo ? '#14532d' : '#666';
+  document.getElementById('mac-banco-wrap').style.display = esTransfer ? '' : 'none';
+  document.getElementById('mac-boleta-wrap').style.display = esEfectivo ? '' : 'none';
+}
+
 function abrirAbonoCliente(cli) {
   // Buscar todas las ventas pendientes del cliente, ordenadas por fecha (más antigua primero)
   var vs = ventas.filter(function(v){return noficial(v.cliente)===cli && v.estado==='NO PAGO' && getSaldo(v)>0;});
@@ -3674,6 +4148,8 @@ function abrirAbonoCliente(cli) {
   document.getElementById('mac-monto').value = '';
   document.getElementById('mac-fecha').value = hoy();
   document.getElementById('mac-boleta').value = '';
+  if (document.getElementById('mac-banco')) document.getElementById('mac-banco').value = '';
+  if (typeof setMacMpago === 'function') setMacMpago('TRANSFERENCIA');
   document.getElementById('mac-error').style.display = 'none';
   document.getElementById('mac-preview').style.display = 'none';
   document.getElementById('btn-confirm-abono-cli').disabled = false;
@@ -3725,7 +4201,12 @@ function confirmarAbonoCliente() {
   if (monto <= 0) { showToast('Ingresá el monto'); return; }
   if (monto > abonoCliActual.deudaTotal) { showToast('Supera la deuda'); return; }
   var fecha = document.getElementById('mac-fecha').value || hoy();
-  var boleta = (document.getElementById('mac-boleta').value||'').trim();
+  var mpago = (document.getElementById('mac-mpago')||{value:'TRANSFERENCIA'}).value || 'TRANSFERENCIA';
+  var banco = mpago === 'TRANSFERENCIA' ? ((document.getElementById('mac-banco')||{value:''}).value||'') : '';
+  var boleta = mpago === 'EFECTIVO' ? ((document.getElementById('mac-boleta')||{value:''}).value||'').trim() : '';
+  if (mpago === 'TRANSFERENCIA' && !banco) {
+    if (!confirm('No seleccionaste banco. ¿Continuar sin banco?')) return;
+  }
 
   // Aplicar FIFO
   var restante = monto;
@@ -3735,15 +4216,16 @@ function confirmarAbonoCliente() {
     var saldo = getSaldo(v);
     var aplica = Math.min(restante, saldo);
     if (aplica <= 0) return;
-    syncAddAbono(v.id, {monto:aplica, fecha:fecha, boleta:boleta, origen:'abono_general'});
+    syncAddAbono(v.id, {monto:aplica, fecha:fecha, mpago:mpago, banco:banco, boleta:boleta, origen:'abono_general'});
     restante -= aplica;
     if (aplica >= saldo) {
       v.estado = 'PAGADO';
       v.fechaPago = fecha;
+      v.mpago = mpago;
+      v.banco = banco;
       saldadas.push(v.id);
-      // Sincronizar el cambio de estado (sin mpago/banco — no se piden en este flujo)
       if (SCRIPT_URL) {
-        var url = SCRIPT_URL+'?action=updatePago&id='+encodeURIComponent(v.id)+'&estado=PAGADO&mpago='+encodeURIComponent(v.mpago||'')+'&fechaPago='+encodeURIComponent(fecha)+'&banco='+encodeURIComponent(v.banco||'');
+        var url = SCRIPT_URL+'?action=updatePago&id='+encodeURIComponent(v.id)+'&estado=PAGADO&mpago='+encodeURIComponent(mpago)+'&fechaPago='+encodeURIComponent(fecha)+'&banco='+encodeURIComponent(banco);
         fetch(url).catch(function(){});
       }
     }
@@ -4506,54 +4988,24 @@ function eliminarAbono(ventaId, abIdx) {
   var ab = arr[abIdx];
   var v = ventas.find(function(x){return String(x.id) == String(ventaId);});
   var nombreCli = v ? noficial(v.cliente) : 'cliente';
-  var msg = '⚠️ ¿Borrar este abono?\n\n'+
-    'Cliente: ' + nombreCli + '\n' +
-    'Fecha: ' + fmtF(ab.fecha) + '\n' +
-    'Monto: ' + fmt(ab.monto) + '\n' +
-    'Medio: ' + (ab.mpago||'—') + (ab.banco?' · '+ab.banco:'') + '\n\n' +
-    'Esta acción NO se puede deshacer.';
-  if (!confirm(msg)) return;
-  // Borrar local
+  if (!confirm('⚠️ ¿Borrar este abono?\n\nCliente: '+nombreCli+'\nFecha: '+fmtF(ab.fecha)+'\nMonto: '+fmt(ab.monto)+'\n\nEsta acción NO se puede deshacer.')) return;
   arr.splice(abIdx, 1);
   if (arr.length === 0) delete abonos[ventaId];
   localStorage.setItem('papelon_abonos', JSON.stringify(abonos));
-  // Si la venta estaba PAGADO y ahora queda con saldo, volverla a NO PAGO
-  if (v && v.estado === 'PAGADO') {
-    var nuevoSaldo = getSaldo(v);
-    if (nuevoSaldo > 0) {
-      v.estado = 'NO PAGO';
-      v.mpago = '';
-      v.fechaPago = '';
-      v.banco = '';
-    }
+  if (v && v.estado === 'PAGADO' && getSaldo(v) > 0) {
+    v.estado = 'NO PAGO'; v.mpago = ''; v.fechaPago = ''; v.banco = '';
   }
   renderT(); rPanel(); rCobros();
-  showToast('Eliminando abono...');
-  // Sincronizar con Sheets si hay id de abono y URL
   if (SCRIPT_URL && ab.id) {
     apiGet({action:'deleteAbono', id: ab.id}).then(function(res){
       if (res && res.ok) {
         showToast('✅ Abono eliminado');
-        // Si revertimos el estado de la venta, también actualizar en Sheets
         if (v && v.estado === 'NO PAGO') {
-          var urlV = SCRIPT_URL + '?action=updatePago&id=' + encodeURIComponent(v.id) +
-            '&estado=' + encodeURIComponent('NO PAGO') +
-            '&mpago=' + encodeURIComponent('') +
-            '&fechaPago=' + encodeURIComponent('') +
-            '&banco=' + encodeURIComponent('');
-          fetch(urlV).catch(function(){});
+          fetch(SCRIPT_URL+'?action=updatePago&id='+encodeURIComponent(v.id)+'&estado=NO PAGO&mpago=&fechaPago=&banco=').catch(function(){});
         }
-      } else {
-        showToast('⚠️ Borrado local OK, falló sync con Sheets: ' + ((res&&res.error)||'desconocido'));
-      }
-    }).catch(function(err){
-      showToast('⚠️ Borrado local OK, sin conexión a Sheets');
-    });
-  } else if (SCRIPT_URL && !ab.id) {
-    showToast('✅ Abono eliminado (solo local — no tenía id en Sheets)');
-  } else {
-    showToast('✅ Abono eliminado');
-  }
+      } else showToast('⚠️ Borrado local OK, falló Sheets');
+    }).catch(function(){ showToast('⚠️ Borrado local OK, sin conexión'); });
+  } else showToast('✅ Abono eliminado');
 }
 
 function syncDelAbonosVenta(ventaId) {
