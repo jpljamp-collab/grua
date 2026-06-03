@@ -958,6 +958,21 @@ tr:hover td { background: #f0fdf4; }
     <div class="rep-header"><h2>📈 Evolución diaria de ventas</h2><div class="rep-sub" id="rep-sub-evolucion"></div></div>
     <div id="rep-evolucion-content"></div>
   </div>
+
+  <div class="card" id="rep-detallado-cliente">
+    <h3>📋 Reporte detallado por cliente (para enviar por WhatsApp)</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">Genera un mensaje con el detalle de cada factura pendiente del cliente: productos, fecha, monto, abonos, saldo y días de vencimiento. Listo para enviarlo por WhatsApp o copiarlo.</div>
+    <div class="fg2">
+      <div class="fl"><label>Cliente</label>
+        <input type="text" id="rep-det-cliente" list="cl-list-buscar" placeholder="Buscá un cliente..." oninput="rRepDetallado()">
+      </div>
+    </div>
+    <div id="rep-det-preview" style="margin-top:14px"></div>
+    <div id="rep-det-acciones" style="margin-top:12px;display:none">
+      <button class="btn-primary" onclick="enviarReporteDetallado()" style="width:auto;padding:10px 18px;background:#25D366;border:none">📱 Enviar por WhatsApp</button>
+      <button class="btn-sec" onclick="copiarReporteDetallado()" style="width:auto;padding:10px 18px">📋 Copiar al portapapeles</button>
+    </div>
+  </div>
 </div>
 
 <!-- ANÁLISIS -->
@@ -1974,6 +1989,129 @@ function _getTelCliente(nombreCliente) {
     if (noficial(c.nombre) === n && c.tel) return String(c.tel);
   }
   return '';
+}
+
+function _productosVentaTexto(v) {
+  var prods = [
+    {key:'l500', lbl:'Limón 500 ml'},
+    {key:'l900', lbl:'Limón 900 ml'},
+    {key:'l18',  lbl:'Limón 1.8 L'},
+    {key:'m500', lbl:'Maracuyá 500 ml'},
+    {key:'m900', lbl:'Maracuyá 900 ml'},
+    {key:'m18',  lbl:'Maracuyá 1.8 L'}
+  ];
+  var lineas = [];
+  prods.forEach(function(p){
+    var qty = Number(v[p.key])||0;
+    if (qty > 0) lineas.push('   • ' + p.lbl + ' × ' + qty);
+  });
+  return lineas.join('\n');
+}
+
+function buildMsgReporteDetallado(nombreCliente) {
+  var nOf = noficial(nombreCliente);
+  var vs = ventas.filter(function(v){
+    return noficial(v.cliente) === nOf && v.estado === 'NO PAGO' && getSaldo(v) > 0;
+  });
+  if (!vs.length) return null;
+  vs.sort(function(a,b){
+    var fa = fechaISO(a.fecha)||''; var fb = fechaISO(b.fecha)||'';
+    if (fa < fb) return -1; if (fa > fb) return 1; return 0;
+  });
+  var hoyD = new Date(); hoyD.setHours(0,0,0,0);
+  var totalDeuda = vs.reduce(function(s,v){return s+getSaldo(v);},0);
+  var esSingular = vs.length === 1;
+
+  var msg = 'Hola ' + nOf + ' 👋\n';
+  msg += 'Esperamos que te encuentres muy bien.\n\n';
+  if (esSingular) {
+    msg += 'Te escribimos de Papelón para compartir el detalle de la factura pendiente en tu cuenta:\n\n';
+  } else {
+    msg += 'Te escribimos de Papelón para compartir el detalle de las facturas pendientes en tu cuenta:\n\n';
+  }
+
+  vs.forEach(function(v){
+    var saldo = getSaldo(v);
+    var nBol = v.talon || v.factura || 'S/N';
+    msg += '📄 *Boleta ' + nBol + '* · ' + fmtF(v.fecha) + ' · ' + fmt(saldo) + '\n';
+    var fIso = fechaISO(v.fecha);
+    if (fIso) {
+      var diasDesde = Math.floor((hoyD - new Date(fIso+'T00:00:00'))/86400000);
+      if (diasDesde > 0) msg += '⏰ *' + diasDesde + ' días vencidos*\n';
+      else if (diasDesde === 0) msg += '⏰ Emitida hoy\n';
+    }
+    msg += '\n';
+  });
+
+  msg += '━━━━━━━━━━━━━━━━━\n';
+  msg += '💵 Total adeudado: *' + fmt(totalDeuda) + '*\n';
+
+  if (DATOS_PAGO) {
+    msg += '\n💳 Datos para transferencia:\n' + DATOS_PAGO + '\n';
+  }
+
+  msg += '\nAgradeceríamos nos pudieras indicar una fecha estimada de pago o enviar el comprobante una vez realizada la transferencia.\n\n';
+  msg += 'Ante cualquier duda o coordinación, estamos atentos para ayudarte.\n\n';
+  msg += '¡Muchas gracias por tu preferencia y apoyo! 🙌\n';
+  msg += 'Equipo Papelón';
+
+  return msg;
+}
+
+
+
+function rRepDetallado() {
+  var inp = document.getElementById('rep-det-cliente');
+  var preview = document.getElementById('rep-det-preview');
+  var acciones = document.getElementById('rep-det-acciones');
+  if (!inp || !preview || !acciones) return;
+  var nombre = (inp.value||'').trim();
+  if (!nombre || nombre.length < 2) {
+    preview.innerHTML = '';
+    acciones.style.display = 'none';
+    return;
+  }
+  var msg = buildMsgReporteDetallado(nombre);
+  if (!msg) {
+    preview.innerHTML = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;color:#15803d;font-size:13px">✅ Este cliente no tiene facturas pendientes.</div>';
+    acciones.style.display = 'none';
+    return;
+  }
+  // Preview (escape HTML, preservar saltos de línea)
+  var htmlMsg = msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Aplicar *bold* → <strong>
+  htmlMsg = htmlMsg.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+  preview.innerHTML = '<div style="background:#ECE5DD;border-radius:10px;padding:14px"><div style="background:white;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.5;color:#2C2C2A;white-space:pre-wrap;font-family:inherit">' + htmlMsg + '</div></div>';
+  acciones.style.display = '';
+}
+
+function enviarReporteDetallado() {
+  var nombre = (document.getElementById('rep-det-cliente').value||'').trim();
+  if (!nombre) { showToast('Buscá primero un cliente'); return; }
+  var msg = buildMsgReporteDetallado(nombre);
+  if (!msg) { showToast('Sin facturas pendientes'); return; }
+  var tel = _getTelCliente(nombre);
+  if (!tel) {
+    if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
+    showToast('⚠️ ' + noficial(nombre) + ' no tiene teléfono cargado. Mensaje copiado al portapapeles.');
+    return;
+  }
+  var telLimpio = String(tel).replace(/[^0-9+]/g,'');
+  if (telLimpio.startsWith('+')) telLimpio = telLimpio.slice(1);
+  if (telLimpio.startsWith('0')) telLimpio = telLimpio.slice(1);
+  if (!telLimpio.startsWith(WSP_COD_PAIS||'56')) telLimpio = (WSP_COD_PAIS||'56') + telLimpio;
+  if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
+  var url = 'https://web.whatsapp.com/send?phone='+telLimpio+'&text='+encodeURIComponent(msg);
+  window.open(url, 'papelon_whatsapp_cliente');
+  showToast('📱 Reporte enviado a WhatsApp de ' + noficial(nombre) + '. Mensaje copiado también.');
+}
+
+function copiarReporteDetallado() {
+  var nombre = (document.getElementById('rep-det-cliente').value||'').trim();
+  if (!nombre) { showToast('Buscá primero un cliente'); return; }
+  var msg = buildMsgReporteDetallado(nombre);
+  if (!msg) { showToast('Sin facturas pendientes'); return; }
+  copiarAlPortapapeles(msg, 'Reporte detallado de ' + noficial(nombre));
 }
 
 function buildMsgRecordatorioCliente(nombreCliente) {
@@ -3212,16 +3350,43 @@ function buscarCliente() {
           '</table></div>'+
         '</div>';
       })()+
-      '<h3 style="font-size:13px;font-weight:600;margin-bottom:10px;color:#333">Historial completo</h3>'+
+      '<h3 style="font-size:13px;font-weight:600;margin-bottom:10px;color:#333">📋 Historial detallado por boleta</h3>'+
       vc.slice().reverse().map(function(v){
-        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:8px">'+
-          '<div><div style="font-size:13px;font-weight:500">'+fmtF(v.fecha)+' · Talonario '+(v.talon||'—')+'</div>'+
-          '<div style="font-size:11px;color:#888;margin-top:2px">Factura: '+(v.factura||'S/F')+' · '+(v.mpago||'—')+(v.vendedor?' · '+v.vendedor:'')+'</div>'+
-          '<div style="font-size:11px;color:#888">'+[v.l500&&'L500:'+v.l500,v.l900&&'L900:'+v.l900,v.l18&&'L1.8:'+v.l18,v.m500&&'M500:'+v.m500,v.m900&&'M900:'+v.m900,v.m18&&'M1.8:'+v.m18].filter(Boolean).join(' · ')+'</div>'+
-          (tieneAbonos(v)?'<div style="font-size:11px;color:var(--primary);margin-top:2px">Abonado: '+fmt(getAbonado(v))+' · Saldo: '+fmt(getSaldo(v))+'</div>':'')+
+        var prodsLista = [
+          {key:'l500', lbl:'Limón 500 ml'},
+          {key:'l900', lbl:'Limón 900 ml'},
+          {key:'l18',  lbl:'Limón 1.8 L'},
+          {key:'m500', lbl:'Maracuyá 500 ml'},
+          {key:'m900', lbl:'Maracuyá 900 ml'},
+          {key:'m18',  lbl:'Maracuyá 1.8 L'}
+        ];
+        var unidadesTotal = 0;
+        var prodsHTML = prodsLista.map(function(p){
+          var q = Number(v[p.key])||0;
+          if (q <= 0) return '';
+          unidadesTotal += q;
+          return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#555">• '+p.lbl+'</span><span style="font-weight:500;color:#333">× '+q+'</span></div>';
+        }).filter(Boolean).join('');
+        var bColor = v.estado==='PAGADO' ? '#dcfce7' : (tieneAbonos(v) ? '#fef9c3' : '#fee2e2');
+        var bTextColor = v.estado==='PAGADO' ? '#15803d' : (tieneAbonos(v) ? '#92400e' : '#991b1b');
+        var bLabel = v.estado==='PAGADO' ? 'Pagado' : (tieneAbonos(v) ? 'Con abono' : 'Pendiente');
+        return '<div style="background:white;border:1px solid #eee;border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
+            '<div>'+
+              '<div style="font-size:13px;font-weight:600;color:#333">📄 Boleta '+(v.talon||'S/N')+(v.factura?' · Factura '+v.factura:'')+'</div>'+
+              '<div style="font-size:11px;color:#888;margin-top:2px">📅 '+fmtF(v.fecha)+(v.vendedor?' · 👤 '+v.vendedor:'')+(v.mpago?' · 💳 '+v.mpago:'')+'</div>'+
+            '</div>'+
+            '<div style="text-align:right">'+
+              '<div style="font-size:15px;font-weight:700;color:#333">'+fmt(v.total)+'</div>'+
+              '<span style="display:inline-block;background:'+bColor+';color:'+bTextColor+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;margin-top:2px">'+bLabel+'</span>'+
+            '</div>'+
           '</div>'+
-          '<div style="text-align:right;flex-shrink:0"><div style="font-size:14px;font-weight:600">'+fmt(v.total)+'</div>'+
-          '<span class="badge '+(v.estado==='PAGADO'?'badge-ok':tieneAbonos(v)?'badge-ab':'badge-no')+'">'+(v.estado==='PAGADO'?'Pagado':tieneAbonos(v)?'Con abono':'Pendiente')+'</span></div>'+
+          (prodsHTML ? '<div style="background:#fafafa;border-radius:8px;padding:8px 12px;margin-top:8px">'+
+            '<div style="font-size:10px;color:#888;text-transform:uppercase;font-weight:600;margin-bottom:4px">Productos · '+unidadesTotal+' unidades</div>'+
+            prodsHTML +
+            '</div>' : '')+
+          (tieneAbonos(v)?'<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 12px;margin-top:6px;background:#fffbeb;border-radius:6px"><span style="color:#92400e">💰 Abonado: '+fmt(getAbonado(v))+'</span><span style="color:#b91c1c;font-weight:600">Saldo: '+fmt(getSaldo(v))+'</span></div>':'')+
+          (v.estado==='NO PAGO'&&!tieneAbonos(v)?'<div style="font-size:12px;padding:6px 12px;margin-top:6px;background:#fee2e2;border-radius:6px;color:#991b1b;font-weight:600;text-align:right">Saldo pendiente: '+fmt(getSaldo(v))+'</div>':'')+
           '</div>';
       }).join('')+
     '</div></div>';
