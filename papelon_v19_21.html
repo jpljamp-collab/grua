@@ -1165,10 +1165,14 @@ tr:hover td { background: #f0fdf4; }
       </div>
       <div class="fl"><label>Días mínimos para incluir en 'Por cobrar'</label>
         <input type="number" id="cfg-dias-min-cobro" min="0" max="60" placeholder="5" style="width:120px">
-        <div style="font-size:11px;color:#888;margin-top:4px">Clientes cuya factura más vieja sin pagar tenga menos días que esto, no aparecen en el WhatsApp a Rubén (todavía es muy pronto).</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">Clientes cuya factura más vieja sin pagar tenga menos días que esto, no aparecen en el WhatsApp a Rubén.</div>
       </div>
     </div>
-    <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;padding:8px 12px;border-radius:8px;margin-top:10px">💡 El número de Rubén se usa para los botones del Panel principal.</div>
+    <div class="fl" style="margin-top:14px"><label>💳 Datos para que el cliente transfiera</label>
+      <textarea id="cfg-datos-pago" rows="4" style="resize:vertical;font-family:inherit;font-size:13px" placeholder="Ej:&#10;Banco de Chile&#10;Cuenta corriente: 12345678&#10;Titular: Yenis Pérez&#10;RUT: 12.345.678-9&#10;Email: pagos@papelon.cl"></textarea>
+      <div style="font-size:11px;color:#888;margin-top:4px">Se incluye en el mensaje de recordatorio de cobro al cliente, así sabe dónde transferir.</div>
+    </div>
+    <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;padding:8px 12px;border-radius:8px;margin-top:10px">💡 Todos estos datos se sincronizan con Google Sheets (hoja KV).</div>
     <button class="btn-primary" onclick="guardarControlCredito()" style="margin-top:12px">Guardar control</button>
   </div>
   <div class="card">
@@ -1505,6 +1509,7 @@ var WSP_RUBEN_TEL = localStorage.getItem('papelon_rub_tel') || '+56948679298';
 var LIMITE_BLOQUEO = parseInt(localStorage.getItem('papelon_limite_bloqueo')||'3',10) || 3;
 var DIAS_MIN_COBRO = parseInt(localStorage.getItem('papelon_dias_min_cobro')||'5',10);
 if (isNaN(DIAS_MIN_COBRO) || DIAS_MIN_COBRO < 0) DIAS_MIN_COBRO = 5;
+var DATOS_PAGO = localStorage.getItem('papelon_datos_pago') || '';
 var creditosAprobados = safeParse('papelon_credito_aprobado','[]');
 var noCobraRuben = safeParse('papelon_no_cobra_ruben','[]');
 var comunas = safeParse('papelon_comunas','[]');
@@ -1729,6 +1734,8 @@ function cargarTodo() {
           var meta = parseFloat(raw); if (!isNaN(meta) && meta >= 0) { META_VENTA = meta; localStorage.setItem('papelon_meta_venta', String(meta)); }
         } else if (row.key === 'DIAS_MIN_COBRO') {
           var dm = parseInt(raw, 10); if (!isNaN(dm) && dm >= 0) { DIAS_MIN_COBRO = dm; localStorage.setItem('papelon_dias_min_cobro', String(dm)); }
+        } else if (row.key === 'DATOS_PAGO') {
+          if (raw !== undefined && raw !== null) { DATOS_PAGO = String(raw); localStorage.setItem('papelon_datos_pago', DATOS_PAGO); }
         }
       });
     }
@@ -1935,6 +1942,117 @@ function estaBloqueado(nombreCliente) {
   return null;
 }
 
+function copiarAlPortapapeles(texto, descripcion) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(function(){
+      showToast('✅ ' + (descripcion||'Mensaje') + ' copiado. Pegalo con Ctrl+V');
+    }).catch(function(){ _copiarFallback(texto, descripcion); });
+  } else { _copiarFallback(texto, descripcion); }
+}
+
+function _copiarFallback(texto, descripcion) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✅ ' + (descripcion||'Mensaje') + ' copiado al portapapeles');
+  } catch(err) {
+    showToast('⚠️ No se pudo copiar.');
+  }
+}
+
+function _getTelCliente(nombreCliente) {
+  if (!nombreCliente) return '';
+  var n = noficial(nombreCliente);
+  for (var i=0; i<clientes.length; i++) {
+    var c = clientes[i];
+    if (!c || !c.nombre) continue;
+    if (noficial(c.nombre) === n && c.tel) return String(c.tel);
+  }
+  return '';
+}
+
+function buildMsgRecordatorioCliente(nombreCliente) {
+  var nOf = noficial(nombreCliente);
+  var vs = ventas.filter(function(v){
+    return noficial(v.cliente) === nOf && v.estado === 'NO PAGO' && getSaldo(v) > 0;
+  });
+  if (!vs.length) return null;
+  vs.sort(function(a,b){
+    var fa = fechaISO(a.fecha)||''; var fb = fechaISO(b.fecha)||'';
+    if (fa < fb) return -1; if (fa > fb) return 1; return 0;
+  });
+  var hoyD = new Date(); hoyD.setHours(0,0,0,0);
+  var totalDeuda = vs.reduce(function(s,v){return s+getSaldo(v);},0);
+  var esSingular = vs.length === 1;
+
+  var msg = 'Hola ' + nOf + ' 👋\n';
+  msg += 'Esperamos que te encuentres muy bien.\n\n';
+  if (esSingular) {
+    msg += 'Te escribimos de Papelón para compartir el estado actualizado de tu cuenta, donde actualmente registramos la siguiente factura pendiente:\n\n';
+  } else {
+    msg += 'Te escribimos de Papelón para compartir el estado actualizado de tu cuenta, donde actualmente registramos las siguientes facturas pendientes:\n\n';
+  }
+
+  vs.forEach(function(v){
+    var saldo = getSaldo(v);
+    msg += '📄 Factura ' + (v.factura||v.talon||'S/N') + ' · ' + fmtF(v.fecha) + '\n';
+    var lineaMonto = '💰 ' + fmt(saldo);
+    var fIso = fechaISO(v.fecha);
+    if (fIso) {
+      var diasDesde = Math.floor((hoyD - new Date(fIso+'T00:00:00'))/86400000);
+      if (diasDesde > 0) lineaMonto += ' · *' + diasDesde + ' días de vencimiento*';
+      else if (diasDesde === 0) lineaMonto += ' · emitida hoy';
+    }
+    msg += lineaMonto + '\n\n';
+  });
+
+  msg += '━━━━━━━━━━━━━━━━━\n';
+  msg += '💵 Total adeudado: *' + fmt(totalDeuda) + '*\n';
+
+  if (DATOS_PAGO) {
+    msg += '\n💳 Datos para transferencia:\n' + DATOS_PAGO + '\n';
+  }
+
+  msg += '\nAgradeceríamos nos pudieras indicar una fecha estimada de pago o enviar el comprobante una vez realizada la transferencia.\n\n';
+  msg += 'Ante cualquier duda o coordinación, estamos atentos para ayudarte.\n\n';
+  msg += '¡Muchas gracias por tu preferencia y apoyo! 🙌\n';
+  msg += 'Equipo Papelón';
+
+  return msg;
+}
+
+
+
+function enviarRecordatorioCliente(nombreCliente) {
+  var msg = buildMsgRecordatorioCliente(nombreCliente);
+  if (!msg) { showToast('Este cliente no tiene facturas pendientes'); return; }
+  var tel = _getTelCliente(nombreCliente);
+  if (!tel) {
+    showToast('⚠️ ' + noficial(nombreCliente) + ' no tiene teléfono cargado. Cargalo en Clientes → Editar. Mensaje copiado al portapapeles.');
+    if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
+    return;
+  }
+  var telLimpio = String(tel).replace(/[^0-9+]/g,'');
+  if (telLimpio.startsWith('+')) telLimpio = telLimpio.slice(1);
+  if (telLimpio.startsWith('0')) telLimpio = telLimpio.slice(1);
+  if (!telLimpio.startsWith(WSP_COD_PAIS||'56')) telLimpio = (WSP_COD_PAIS||'56') + telLimpio;
+  if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
+  var url = 'https://web.whatsapp.com/send?phone='+telLimpio+'&text='+encodeURIComponent(msg);
+  window.open(url, 'papelon_whatsapp_cliente');
+  showToast('📱 WhatsApp a ' + noficial(nombreCliente) + '. Mensaje copiado también.');
+}
+
+function copiarRecordatorioCliente(nombreCliente) {
+  var msg = buildMsgRecordatorioCliente(nombreCliente);
+  if (!msg) { showToast('Sin facturas pendientes'); return; }
+  copiarAlPortapapeles(msg, 'Recordatorio para ' + noficial(nombreCliente));
+}
+
 function buildMsgBloqueados() {
   var bloq = clientesBloqueados();
   var hoyTxt = new Date().toLocaleDateString('es-CL');
@@ -1954,43 +2072,14 @@ function buildMsgBloqueados() {
   return msg;
 }
 
-function copiarAlPortapapeles(texto, descripcion) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(texto).then(function(){
-      showToast('✅ ' + (descripcion||'Mensaje') + ' copiado. Pegalo en WhatsApp con Ctrl+V');
-    }).catch(function(){
-      _copiarFallback(texto, descripcion);
-    });
-  } else {
-    _copiarFallback(texto, descripcion);
-  }
-}
-
-function _copiarFallback(texto, descripcion) {
-  try {
-    var ta = document.createElement('textarea');
-    ta.value = texto;
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast('✅ ' + (descripcion||'Mensaje') + ' copiado al portapapeles');
-  } catch(err) {
-    showToast('⚠️ No se pudo copiar. Tu navegador no lo permite.');
-  }
-}
-
 function enviarBloqueadosWhatsApp() {
   if (!WSP_RUBEN_TEL) { showToast('⚠️ Falta WhatsApp de Rubén en Config'); return; }
   var msg = buildMsgBloqueados();
   var tel = String(WSP_RUBEN_TEL).replace(/[^0-9]/g,'');
-  // Copiar al portapapeles primero (por si la ventana de WhatsApp Web no permite enviar texto largo)
   if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
-  // Abrir WhatsApp Web directo, con nombre de ventana fijo para reutilizar la misma pestaña
   var url = 'https://web.whatsapp.com/send?phone='+tel+'&text='+encodeURIComponent(msg);
   window.open(url, 'papelon_whatsapp_ruben');
-  showToast('📱 Mensaje copiado al portapapeles también. Si no se envía solo, pegá con Ctrl+V en el chat.');
+  showToast('📱 Mensaje copiado al portapapeles también. Si no se envía solo, pegá con Ctrl+V.');
 }
 
 function copiarBloqueadosWhatsApp() {
@@ -2016,9 +2105,7 @@ function buildMsgPorCobrar() {
       }
     }
   });
-  Object.keys(byC).forEach(function(k){
-    if (byC[k].diasMasViejo < DIAS_MIN_COBRO) delete byC[k];
-  });
+  Object.keys(byC).forEach(function(k){ if (byC[k].diasMasViejo < DIAS_MIN_COBRO) delete byC[k]; });
   var lista = Object.values(byC).sort(function(a,b){
     if ((b.vencidas>0) !== (a.vencidas>0)) return (b.vencidas>0)?1:-1;
     return b.deuda - a.deuda;
@@ -2028,7 +2115,7 @@ function buildMsgPorCobrar() {
   if (lista.length === 0) {
     msg += '✅ Nada para cobrar hoy (mín ' + DIAS_MIN_COBRO + ' días desde la factura).';
   } else {
-    msg += '💰 Clientes con saldo a cobrar (' + lista.length + ')\nMín ' + DIAS_MIN_COBRO + ' días desde la factura. Vencidos primero.\n\n';
+    msg += '💰 Clientes con saldo a cobrar (' + lista.length + ')\nMín ' + DIAS_MIN_COBRO + ' días. Vencidos primero.\n\n';
     lista.forEach(function(c,i){
       msg += (i+1) + '. *' + c.oficial + '*';
       if (c.vencidas > 0) msg += ' ⚠️';
@@ -2049,7 +2136,7 @@ function enviarPorCobrarWhatsApp() {
   if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(function(){});
   var url = 'https://web.whatsapp.com/send?phone='+tel+'&text='+encodeURIComponent(msg);
   window.open(url, 'papelon_whatsapp_ruben');
-  showToast('📱 Mensaje copiado al portapapeles también. Si no se envía solo, pegá con Ctrl+V en el chat.');
+  showToast('📱 Mensaje copiado al portapapeles. Pegá con Ctrl+V si no se envía solo.');
 }
 
 function copiarPorCobrarWhatsApp() {
@@ -2244,11 +2331,11 @@ function renderBloqueadosCard() {
       '<div style="font-size:11px;color:#666;margin-bottom:4px">📱 Enviar por WhatsApp a Rubén:</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
         '<button class="btn-sec" onclick="enviarBloqueadosWhatsApp()" style="background:#25D366;color:white;border:none;font-weight:600;padding:9px 12px;flex:1;min-width:140px">📱 NO DESPACHAR ('+bloq.length+')</button>'+
-        '<button class="btn-sec" onclick="copiarBloqueadosWhatsApp()" title="Copiar mensaje al portapapeles" style="background:white;color:#15803d;border:1px solid #15803d;font-weight:600;padding:9px 12px">📋 Copiar</button>'+
+        '<button class="btn-sec" onclick="copiarBloqueadosWhatsApp()" title="Copiar al portapapeles" style="background:white;color:#15803d;border:1px solid #15803d;font-weight:600;padding:9px 12px">📋 Copiar</button>'+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+
         '<button class="btn-sec" onclick="enviarPorCobrarWhatsApp()" style="background:#128C7E;color:white;border:none;font-weight:600;padding:9px 12px;flex:1;min-width:140px">💰 POR COBRAR ('+nPorCobrar+')</button>'+
-        '<button class="btn-sec" onclick="copiarPorCobrarWhatsApp()" title="Copiar mensaje al portapapeles" style="background:white;color:#0f766e;border:1px solid #0f766e;font-weight:600;padding:9px 12px">📋 Copiar</button>'+
+        '<button class="btn-sec" onclick="copiarPorCobrarWhatsApp()" title="Copiar al portapapeles" style="background:white;color:#0f766e;border:1px solid #0f766e;font-weight:600;padding:9px 12px">📋 Copiar</button>'+
       '</div>'+
     '</div>';
   var html = '';
@@ -2420,7 +2507,7 @@ function renderT() {
       '<td style="font-size:11px;color:#888">'+(v.mpago||'—')+'</td>'+
       '<td style="font-size:11px;color:#888">'+fmtF(v.fechaPago)+'</td>'+
       '<td style="font-size:11px;color:#888">'+(v.banco||'—')+'</td>'+
-      '<td style="min-width:200px;white-space:nowrap"><div style="font-size:11px;color:#888;margin-bottom:4px">'+vb+'</div>'+'<div style="display:flex;gap:6px;flex-wrap:wrap">'+'<button class="btn-edit" onclick="abrirEditar(\''+v.id+'\')" style="font-size:12px;padding:6px 10px;font-weight:600">✏️ Editar</button>'+'<button class="btn-danger" onclick="eliminarVenta(\''+v.id+'\')" title="Eliminar venta" style="font-size:12px;padding:6px 10px;font-weight:600">🗑️ Borrar</button>'+'</div></td>'+
+      '<td style="min-width:200px;white-space:nowrap"><div style="font-size:11px;color:#888;margin-bottom:4px">'+vb+'</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-edit" onclick="abrirEditar(\''+v.id+'\')" style="font-size:12px;padding:6px 10px;font-weight:600">✏️ Editar</button><button class="btn-danger" onclick="eliminarVenta(\''+v.id+'\')" title="Eliminar venta" style="font-size:12px;padding:6px 10px;font-weight:600">🗑️ Borrar</button></div></td>'+
       '</tr>';
   }).join('');
 }
@@ -2457,8 +2544,7 @@ function setEditEstado(val) {
 function eliminarVenta(id){
   var v = ventas.find(function(x){return String(x.id) == String(id);});
   if (!v) { showToast('Venta no encontrada'); return; }
-  var msg = '⚠️ ¿Eliminar esta venta?\n\nCliente: '+noficial(v.cliente)+'\nFecha: '+fmtF(v.fecha)+'\nTalonario: '+(v.talon||'—')+'\nTotal: '+fmt(v.total)+'\n\nEsto también borra sus abonos asociados. Esta acción NO se puede deshacer.';
-  if (!confirm(msg)) return;
+  if (!confirm('⚠️ ¿Eliminar esta venta?\n\nCliente: '+noficial(v.cliente)+'\nFecha: '+fmtF(v.fecha)+'\nTalonario: '+(v.talon||'—')+'\nTotal: '+fmt(v.total)+'\n\nEsto también borra sus abonos asociados. Esta acción NO se puede deshacer.')) return;
   var idx = ventas.findIndex(function(x){return String(x.id) == String(id);});
   if (idx >= 0) ventas.splice(idx, 1);
   if (abonos[id]) { delete abonos[id]; localStorage.setItem('papelon_abonos', JSON.stringify(abonos)); }
@@ -2752,6 +2838,8 @@ function rCobros() {
         '<div style="padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap">'+
           '<button class="btn-sm" style="color:#92400e;border-color:#fcd34d;background:#fef9c3" onclick="abrirAbonoCliente(\''+cli.replace(/'/g,"\\'")+'\')">💰 Abonar al total</button>'+
           '<button class="btn-sm" style="color:var(--primary);border-color:var(--primary)" onclick="saldarTodo(\''+cli.replace(/'/g,"\\'")+'\')" >Saldar todo</button>'+
+          '<button class="btn-sm" style="color:white;border-color:#25D366;background:#25D366;font-weight:600" onclick="enviarRecordatorioCliente(\''+cli.replace(/'/g,"\\'")+'\')" title="Enviar recordatorio de pago por WhatsApp">📱 Enviar recordatorio</button>'+
+          '<button class="btn-sm" style="color:#15803d;border-color:#15803d;background:white" onclick="copiarRecordatorioCliente(\''+cli.replace(/'/g,"\\'")+'\')" title="Copiar el mensaje al portapapeles">📋 Copiar</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -3758,6 +3846,7 @@ function rConfig(){
   if (document.getElementById('cfg-limite-bloqueo')) document.getElementById('cfg-limite-bloqueo').value = LIMITE_BLOQUEO || 3;
   if (document.getElementById('cfg-rub-tel')) document.getElementById('cfg-rub-tel').value = WSP_RUBEN_TEL || '';
   if (document.getElementById('cfg-dias-min-cobro')) document.getElementById('cfg-dias-min-cobro').value = DIAS_MIN_COBRO;
+  if (document.getElementById('cfg-datos-pago')) document.getElementById('cfg-datos-pago').value = DATOS_PAGO || '';
   document.getElementById('cfg-wsp-sin').value = WSP_TEMPLATES.sin || '';
   document.getElementById('cfg-wsp-bajaron').value = WSP_TEMPLATES.bajaron || '';
   document.getElementById('cfg-wsp-ausentes').value = WSP_TEMPLATES.ausentes || '';
@@ -3783,6 +3872,12 @@ function guardarControlCredito(){
       localStorage.setItem('papelon_dias_min_cobro', String(d));
       saveKVToSheets('DIAS_MIN_COBRO', String(d));
     }
+  }
+  var dpEl = document.getElementById('cfg-datos-pago');
+  if (dpEl) {
+    DATOS_PAGO = dpEl.value.trim();
+    localStorage.setItem('papelon_datos_pago', DATOS_PAGO);
+    saveKVToSheets('DATOS_PAGO', DATOS_PAGO);
   }
   localStorage.setItem('papelon_limite_bloqueo', String(lim));
   localStorage.setItem('papelon_rub_tel', tel);
