@@ -1054,6 +1054,19 @@ tr:hover td { background: #f0fdf4; }
     </div>
     <div id="an-cliente-detalle"></div>
   </div>
+
+  <div class="card" id="an-tomar-pedidos">
+    <h3>📱 Tomar pedidos en cadena</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">La app clasifica a tus clientes en 3 grupos según cuándo compraron por última vez, y arma el mensaje de venta adecuado para cada uno. Ideal para hacer "ronda" de WhatsApp todos los días.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn-sec" id="tp-filt-todos" onclick="setFiltroPedidos('todos')" style="border-color:var(--primary);background:var(--primary);color:white">Todos</button>
+      <button class="btn-sec" id="tp-filt-activos" onclick="setFiltroPedidos('activos')">🟢 Activos (≤10d)</button>
+      <button class="btn-sec" id="tp-filt-tibios" onclick="setFiltroPedidos('tibios')">🟡 Tibios (11-30d)</button>
+      <button class="btn-sec" id="tp-filt-frios" onclick="setFiltroPedidos('frios')">🔴 Fríos (+30d)</button>
+    </div>
+    <div id="tp-stats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div id="tp-lista"></div>
+  </div>
 </div>
 
 <!-- INVENTARIO -->
@@ -1203,6 +1216,11 @@ tr:hover td { background: #f0fdf4; }
     <div style="font-size:12px;color:#888;margin-bottom:12px">Descarga un archivo JSON con TODOS los datos de la planilla (ventas, clientes, abonos, producciones, autoventas, devoluciones, cierres, comunas, grupos, precios). Guardalo en un lugar seguro (Drive, email) como respaldo.</div>
     <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;padding:8px 12px;border-radius:8px;margin-bottom:12px">💡 <strong>Recomendación:</strong> hacé un backup cada semana. Si algún día se borran datos por error, podés recuperarlos.</div>
     <button class="btn-primary" onclick="hacerBackupCompleto()">📦 Descargar backup ahora</button>
+  </div>
+  <div class="card">
+    <h3>🔍 Auditoría: Detectar ventas duplicadas</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">Busca ventas con el mismo cliente, misma fecha y mismo total — típicamente generadas cuando un "Failed to fetch" hizo que registres la misma venta dos veces. Mantiene la primera de cada grupo y borra las copias extra.</div>
+    <button class="btn-danger" onclick="eliminarDuplicadosVentas()" style="background:white;color:#b91c1c;border:1px solid #fca5a5;padding:10px 18px">🔍 Buscar y eliminar duplicados</button>
   </div>
   <div class="card">
     <h3>💬 Plantillas de WhatsApp</h3>
@@ -1525,6 +1543,23 @@ var LIMITE_BLOQUEO = parseInt(localStorage.getItem('papelon_limite_bloqueo')||'3
 var DIAS_MIN_COBRO = parseInt(localStorage.getItem('papelon_dias_min_cobro')||'5',10);
 if (isNaN(DIAS_MIN_COBRO) || DIAS_MIN_COBRO < 0) DIAS_MIN_COBRO = 5;
 var DATOS_PAGO = localStorage.getItem('papelon_datos_pago') || '';
+var filtroPedidos = 'todos';
+var pedidosEnviados = safeParse('papelon_pedidos_enviados_hoy','{}');
+// Defensive: asegurar que sea un objeto
+if (!pedidosEnviados || typeof pedidosEnviados !== 'object' || Array.isArray(pedidosEnviados)) {
+  pedidosEnviados = {};
+}
+// Limpiar pedidosEnviados si es de otro día
+try {
+  var hoyStr = new Date().toISOString().slice(0,10);
+  if (pedidosEnviados._fecha !== hoyStr) {
+    pedidosEnviados = {_fecha: hoyStr};
+    localStorage.setItem('papelon_pedidos_enviados_hoy', JSON.stringify(pedidosEnviados));
+  }
+} catch(e) {
+  console.error('Error inicializando pedidosEnviados:', e);
+  pedidosEnviados = {};
+}
 var creditosAprobados = safeParse('papelon_credito_aprobado','[]');
 var noCobraRuben = safeParse('papelon_no_cobra_ruben','[]');
 var comunas = safeParse('papelon_comunas','[]');
@@ -1796,26 +1831,39 @@ function verificarAlertas() {
 }
 
 function go(v) {
-  document.querySelectorAll('.view').forEach(function(e){e.classList.remove('active');});
-  document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active');});
-  document.getElementById('v-'+v).classList.add('active');
-  var map = {panel:0,nuevo:1,ventas:2,cobros:3,produccion:4,autoventa:5,devoluciones:6,cortesias:7,clientes:8,rutas:9,buscar:10,unificar:11,reportes:12,analisis:13,inventario:14,config:15};
-  document.querySelectorAll('.nav button')[map[v]].classList.add('active');
-  if(v==='panel') rPanel();
-  if(v==='ventas') renderT();
-  if(v==='cobros') rCobros();
-  if(v==='produccion') rProduccion();
-  if(v==='autoventa') rAutoventa();
-  if(v==='devoluciones') rDevoluciones();
-  if(v==='cortesias') rCortesias();
-  if(v==='clientes') renderClientes();
-  if(v==='rutas') rRutas();
-  if(v==='buscar'){document.getElementById('busq-historial').value='';document.getElementById('cli-resultado').innerHTML='';}
-  if(v==='unificar') renderGrupos();
-  if(v==='reportes') rReportes();
-  if(v==='analisis') rAnalisisTab();
-  if(v==='inventario') rInventarioTab();
-  if(v==='config') rConfig();
+  try {
+    document.querySelectorAll('.view').forEach(function(e){e.classList.remove('active');});
+    document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active');});
+    var view = document.getElementById('v-'+v);
+    if (!view) { console.error('No existe la vista v-'+v); return; }
+    view.classList.add('active');
+    var map = {panel:0,nuevo:1,ventas:2,cobros:3,produccion:4,autoventa:5,devoluciones:6,cortesias:7,clientes:8,rutas:9,buscar:10,unificar:11,reportes:12,analisis:13,inventario:14,config:15};
+    var btn = document.querySelectorAll('.nav button')[map[v]];
+    if (btn) btn.classList.add('active');
+  } catch(err) {
+    console.error('Error navegando a '+v+':', err);
+    return;
+  }
+  try {
+    if(v==='panel') rPanel();
+    if(v==='ventas') renderT();
+    if(v==='cobros') rCobros();
+    if(v==='produccion') rProduccion();
+    if(v==='autoventa') rAutoventa();
+    if(v==='devoluciones') rDevoluciones();
+    if(v==='cortesias') rCortesias();
+    if(v==='clientes') renderClientes();
+    if(v==='rutas') rRutas();
+    if(v==='buscar'){document.getElementById('busq-historial').value='';document.getElementById('cli-resultado').innerHTML='';}
+    if(v==='unificar') renderGrupos();
+    if(v==='reportes') rReportes();
+    if(v==='analisis') { rAnalisisTab(); renderTomarPedidos(); }
+    if(v==='inventario') rInventarioTab();
+    if(v==='config') rConfig();
+  } catch(err) {
+    console.error('Error renderizando '+v+':', err);
+    if (typeof showToast === 'function') showToast('⚠️ Error en módulo '+v+': '+(err.message||err));
+  }
 }
 
 function calcTotal() {
@@ -2114,6 +2162,247 @@ function copiarReporteDetallado() {
   copiarAlPortapapeles(msg, 'Reporte detallado de ' + noficial(nombre));
 }
 
+function _ultimaVentaCliente(nombreCliente) {
+  var nOf = noficial(nombreCliente);
+  var vs = ventas.filter(function(v){ return noficial(v.cliente) === nOf; });
+  if (!vs.length) return null;
+  vs.sort(function(a,b){
+    var fa = fechaISO(a.fecha)||''; var fb = fechaISO(b.fecha)||'';
+    if (fa < fb) return 1; if (fa > fb) return -1; return 0;
+  });
+  return vs[0];
+}
+
+function _productosVentaPlano(v) {
+  if (!v) return '';
+  var prods = [
+    {key:'l500', emoji:'🍋', lbl:'Limón 500 ml'},
+    {key:'l900', emoji:'🍋', lbl:'Limón 900 ml'},
+    {key:'l18',  emoji:'🍋', lbl:'Limón 1.8 L'},
+    {key:'m500', emoji:'🥭', lbl:'Maracuyá 500 ml'},
+    {key:'m900', emoji:'🥭', lbl:'Maracuyá 900 ml'},
+    {key:'m18',  emoji:'🥭', lbl:'Maracuyá 1.8 L'}
+  ];
+  var lineas = [];
+  prods.forEach(function(p){
+    var q = Number(v[p.key])||0;
+    if (q > 0) lineas.push(p.emoji + ' ' + p.lbl + ' × ' + q);
+  });
+  return lineas.join('\n');
+}
+
+function _diasDesdeUltimaCompra(nombreCliente) {
+  var ult = _ultimaVentaCliente(nombreCliente);
+  if (!ult) return null;
+  var fIso = fechaISO(ult.fecha);
+  if (!fIso) return null;
+  var hoyD = new Date(); hoyD.setHours(0,0,0,0);
+  return Math.floor((hoyD - new Date(fIso+'T00:00:00'))/86400000);
+}
+
+function _clasificarCliente(nombreCliente) {
+  var dias = _diasDesdeUltimaCompra(nombreCliente);
+  if (dias === null) return 'nuevo';
+  if (dias <= 10) return 'activo';
+  if (dias <= 30) return 'tibio';
+  return 'frio';
+}
+
+function buildMsgVentaActivo(nombreCliente) {
+  var nOf = noficial(nombreCliente);
+  var msg = '¡Hola ' + nOf + '! 🍋👋\n\n';
+  msg += '¿Estamos tomando pedidos de Papelón esta semana, te envío? 🧊\n\n';
+  msg += 'Estamos agendando los pedidos para los despachos de la semana 🚚\n\n';
+  msg += '📦 *Productos disponibles:*\n';
+  msg += '🍋 Papelón sabor Limón — 500 ml · 900 ml · 1.8 L\n';
+  msg += '🥭 Papelón sabor Limón-Maracuyá — 500 ml · 900 ml · 1.8 L\n\n';
+  msg += '✨ *Fórmula mejorada y de calidad*\n\n';
+  msg += '¡Frescos, naturales y listos para que tus clientes disfruten! 💧\n\n';
+  msg += '⚠️ *No te quedes sin el tuyo* — confírmame tu pedido y te lo aseguro en el próximo despacho 🙌\n\n';
+  msg += 'Avísame por aquí 👇\n\n';
+  msg += '¡Un abrazo!\nEquipo Papelón 🍋';
+  return msg;
+}
+
+function buildMsgVentaTibio(nombreCliente) {
+  var nOf = noficial(nombreCliente);
+  var dias = _diasDesdeUltimaCompra(nombreCliente);
+  var msg = '¡Hola ' + nOf + '! 🍋👋\n\n';
+  if (dias && dias >= 14) {
+    msg += 'Hace un tiempito que no nos vemos por tu negocio ⏰\n\n';
+  }
+  msg += '¿Estamos tomando pedidos de Papelón esta semana, te envío? 🧊\n\n';
+  msg += 'Estamos agendando los pedidos de la semana para los despachos en tu zona 🚚\n\n';
+  msg += '📦 *Productos disponibles:*\n';
+  msg += '🍋 Papelón sabor Limón — 500 ml · 900 ml · 1.8 L\n';
+  msg += '🥭 Papelón sabor Limón-Maracuyá — 500 ml · 900 ml · 1.8 L\n\n';
+  msg += '✨ *Fórmula mejorada y de calidad*\n\n';
+  msg += '¡Naturales, refrescantes y listos para vender! 💧\n\n';
+  msg += '⚠️ *No te quedes sin el tuyo* esta semana — dime qué necesitas y lo organizo para el próximo despacho 🙌\n\n';
+  msg += '¡Te espero por aquí! 👇\n\n';
+  msg += 'Un saludo,\nEquipo Papelón 🍋';
+  return msg;
+}
+
+function buildMsgVentaFrio(nombreCliente) {
+  var nOf = noficial(nombreCliente);
+  var msg = '¡Hola ' + nOf + '! 🍋👋\n\n';
+  msg += '¡Hace tiempo que no nos vemos! ⏰\n\n';
+  msg += 'Te escribo de Papelón 🧊 — estamos agendando los pedidos de esta semana y pasamos por tu zona. ¿Te envío?\n\n';
+  msg += '📦 *Productos disponibles:*\n';
+  msg += '🍋 Papelón sabor Limón — 500 ml · 900 ml · 1.8 L\n';
+  msg += '🥭 Papelón sabor Limón-Maracuyá — 500 ml · 900 ml · 1.8 L\n\n';
+  msg += '✨ *Fórmula mejorada y de calidad*\n\n';
+  msg += '¡Frescos y naturales, listos para que tus clientes vuelvan a disfrutarlos! 💧\n\n';
+  msg += '🎁 *Si quieres volver a probar, te dejo una muestra gratis sin compromiso* — solo dime "sí" y la envío en el próximo viaje.\n\n';
+  msg += '⚠️ *No te quedes sin Papelón* — dime y lo coordinamos 🙌\n\n';
+  msg += '¡Un abrazo grande!\nEquipo Papelón 🍋';
+  return msg;
+}
+
+function buildMsgVentaCliente(nombreCliente) {
+  var tipo = _clasificarCliente(nombreCliente);
+  if (tipo === 'activo') return {tipo:'activo', msg: buildMsgVentaActivo(nombreCliente)};
+  if (tipo === 'tibio') return {tipo:'tibio', msg: buildMsgVentaTibio(nombreCliente)};
+  if (tipo === 'frio') return {tipo:'frio', msg: buildMsgVentaFrio(nombreCliente)};
+  return {tipo:'nuevo', msg: buildMsgVentaActivo(nombreCliente)};
+}
+
+function enviarPedidoCliente(nombreCliente) {
+  var pkg = buildMsgVentaCliente(nombreCliente);
+  if (!pkg || !pkg.msg) { showToast('No se pudo armar el mensaje'); return; }
+  var tel = _getTelCliente(nombreCliente);
+  if (!tel) {
+    if (navigator.clipboard) navigator.clipboard.writeText(pkg.msg).catch(function(){});
+    showToast('⚠️ ' + noficial(nombreCliente) + ' no tiene teléfono. Mensaje copiado al portapapeles.');
+    _marcarPedidoEnviado(nombreCliente);
+    return;
+  }
+  var telLimpio = String(tel).replace(/[^0-9+]/g,'');
+  if (telLimpio.startsWith('+')) telLimpio = telLimpio.slice(1);
+  if (telLimpio.startsWith('0')) telLimpio = telLimpio.slice(1);
+  if (!telLimpio.startsWith(WSP_COD_PAIS||'56')) telLimpio = (WSP_COD_PAIS||'56') + telLimpio;
+  if (navigator.clipboard) navigator.clipboard.writeText(pkg.msg).catch(function(){});
+  var url = 'https://web.whatsapp.com/send?phone='+telLimpio+'&text='+encodeURIComponent(pkg.msg);
+  window.open(url, 'papelon_whatsapp_cliente');
+  _marcarPedidoEnviado(nombreCliente);
+  showToast('📱 ' + pkg.tipo.toUpperCase() + ' → ' + noficial(nombreCliente));
+}
+
+function copiarPedidoCliente(nombreCliente) {
+  var pkg = buildMsgVentaCliente(nombreCliente);
+  if (!pkg || !pkg.msg) { showToast('No se pudo armar el mensaje'); return; }
+  copiarAlPortapapeles(pkg.msg, 'Mensaje de venta ' + pkg.tipo + ' · ' + noficial(nombreCliente));
+  _marcarPedidoEnviado(nombreCliente);
+}
+
+function _marcarPedidoEnviado(nombreCliente) {
+  var n = noficial(nombreCliente);
+  pedidosEnviados[n] = true;
+  localStorage.setItem('papelon_pedidos_enviados_hoy', JSON.stringify(pedidosEnviados));
+  renderTomarPedidos();
+}
+
+function setFiltroPedidos(f) {
+  filtroPedidos = f;
+  ['todos','activos','tibios','frios'].forEach(function(x){
+    var b = document.getElementById('tp-filt-'+x);
+    if (!b) return;
+    if (x === f) {
+      b.style.borderColor = 'var(--primary)';
+      b.style.background = 'var(--primary)';
+      b.style.color = 'white';
+    } else {
+      b.style.borderColor = '';
+      b.style.background = '';
+      b.style.color = '';
+    }
+  });
+  renderTomarPedidos();
+}
+
+function renderTomarPedidos() {
+  try {
+  var stats = document.getElementById('tp-stats');
+  var lista = document.getElementById('tp-lista');
+  if (!stats || !lista) return;
+  // Recolectar todos los clientes únicos (oficiales) con al menos una venta
+  var byC = {};
+  ventas.forEach(function(v){
+    var n = noficial(v.cliente);
+    if (!n) return;
+    if (!byC[n]) byC[n] = { oficial:n, ultimaFecha:'', count:0 };
+    byC[n].count++;
+    var fIso = fechaISO(v.fecha);
+    if (fIso && (!byC[n].ultimaFecha || fIso > byC[n].ultimaFecha)) byC[n].ultimaFecha = fIso;
+  });
+  // Clasificar
+  var hoyD = new Date(); hoyD.setHours(0,0,0,0);
+  var clasif = {activo:0, tibio:0, frio:0};
+  var lst = Object.values(byC).map(function(c){
+    var dias = c.ultimaFecha ? Math.floor((hoyD - new Date(c.ultimaFecha+'T00:00:00'))/86400000) : 999;
+    var tipo = dias <= 10 ? 'activo' : (dias <= 30 ? 'tibio' : 'frio');
+    clasif[tipo]++;
+    c.dias = dias;
+    c.tipo = tipo;
+    return c;
+  });
+  // Stats arriba
+  stats.innerHTML =
+    '<div style="flex:1;min-width:120px;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:10px"><div style="font-size:11px;color:#15803d;font-weight:600">🟢 ACTIVOS</div><div style="font-size:22px;font-weight:700;color:#14532d">'+clasif.activo+'</div></div>'+
+    '<div style="flex:1;min-width:120px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px"><div style="font-size:11px;color:#92400e;font-weight:600">🟡 TIBIOS</div><div style="font-size:22px;font-weight:700;color:#78350f">'+clasif.tibio+'</div></div>'+
+    '<div style="flex:1;min-width:120px;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px"><div style="font-size:11px;color:#991b1b;font-weight:600">🔴 FRÍOS</div><div style="font-size:22px;font-weight:700;color:#7f1d1d">'+clasif.frio+'</div></div>';
+  // Filtrar
+  var filt = lst;
+  if (filtroPedidos !== 'todos') {
+    filt = lst.filter(function(c){
+      if (filtroPedidos === 'activos') return c.tipo === 'activo';
+      if (filtroPedidos === 'tibios') return c.tipo === 'tibio';
+      if (filtroPedidos === 'frios') return c.tipo === 'frio';
+      return true;
+    });
+  }
+  // Ordenar: primero los más urgentes (fríos), después tibios, después activos. Dentro de cada grupo: los que llevan más días
+  var orden = {frio:0, tibio:1, activo:2, nuevo:3};
+  filt.sort(function(a,b){
+    if (orden[a.tipo] !== orden[b.tipo]) return orden[a.tipo] - orden[b.tipo];
+    return b.dias - a.dias;
+  });
+  // Render lista
+  if (!filt.length) {
+    lista.innerHTML = '<div style="text-align:center;color:#888;padding:20px;font-size:13px">Sin clientes en este filtro.</div>';
+    return;
+  }
+  lista.innerHTML = filt.map(function(c){
+    var ult = _ultimaVentaCliente(c.oficial);
+    var tel = _getTelCliente(c.oficial);
+    var enviado = !!pedidosEnviados[c.oficial];
+    var colorBg, colorBd, colorTxt, emoji, labelTipo;
+    if (c.tipo === 'activo') { colorBg='#f0fdf4'; colorBd='#bbf7d0'; colorTxt='#15803d'; emoji='🟢'; labelTipo='ACTIVO'; }
+    else if (c.tipo === 'tibio') { colorBg='#fef9c3'; colorBd='#fde68a'; colorTxt='#92400e'; emoji='🟡'; labelTipo='TIBIO'; }
+    else { colorBg='#fef2f2'; colorBd='#fecaca'; colorTxt='#991b1b'; emoji='🔴'; labelTipo='FRÍO'; }
+    var nameEsc = c.oficial.replace(/'/g,"\\'");
+    var prodResumen = ult ? _productosVentaPlano(ult).replace(/\n/g, ' · ') : 'Sin pedidos previos';
+    return '<div style="background:'+colorBg+';border:1px solid '+colorBd+';border-radius:10px;padding:12px;margin-bottom:10px'+(enviado?';opacity:0.6':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:200px">'+
+          '<div style="font-size:14px;font-weight:600;color:'+colorTxt+'">'+emoji+' '+c.oficial+(enviado?' <span style="background:'+colorTxt+';color:white;padding:1px 6px;border-radius:6px;font-size:10px;margin-left:6px">ENVIADO HOY</span>':'')+'</div>'+
+          '<div style="font-size:11px;color:'+colorTxt+';margin-top:2px">'+labelTipo+' · Última compra hace '+c.dias+' días'+(tel?' · 📞 '+tel:' · ⚠️ Sin teléfono')+'</div>'+
+          '<div style="font-size:11px;color:#555;margin-top:6px;font-style:italic">'+prodResumen+'</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          '<button class="btn-sec" onclick="enviarPedidoCliente(\''+nameEsc+'\')" style="background:#25D366;color:white;border:none;font-weight:600;padding:8px 12px;font-size:12px">📱 Mandar</button>'+
+          '<button class="btn-sec" onclick="copiarPedidoCliente(\''+nameEsc+'\')" style="background:white;color:#15803d;border:1px solid #15803d;font-weight:600;padding:8px 12px;font-size:12px">📋</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  } catch(err) {
+    console.error('Error en renderTomarPedidos:', err);
+    if (lista) lista.innerHTML = '<div style="color:#b91c1c;padding:10px;font-size:13px">⚠️ Error: '+(err.message||err)+'</div>';
+  }
+}
+
 function buildMsgRecordatorioCliente(nombreCliente) {
   var nOf = noficial(nombreCliente);
   var vs = ventas.filter(function(v){
@@ -2231,7 +2520,7 @@ function buildMsgPorCobrar() {
     if (v.estado !== 'PAGADO' && getSaldo(v) > 0) {
       var n = noficial(v.cliente);
       if (!cobraRuben(n)) return;
-      if (!byC[n]) byC[n] = { oficial:n, count:0, deuda:0, vencidas:0, diasMasViejo:0 };
+      if (!byC[n]) byC[n] = { oficial:n, count:0, deuda:0, vencidas:0, diasMasViejo:0, fechaMasVieja:'' };
       byC[n].count++;
       byC[n].deuda += getSaldo(v);
       var dias = v.fechaLimite ? diasHasta(v.fechaLimite) : null;
@@ -2240,12 +2529,26 @@ function buildMsgPorCobrar() {
       if (fIso) {
         var diasDesde = Math.floor((hoyD - new Date(fIso+'T00:00:00'))/86400000);
         if (diasDesde > byC[n].diasMasViejo) byC[n].diasMasViejo = diasDesde;
+        // Guardar fecha más vieja para sort igual a Cobros
+        if (!byC[n].fechaMasVieja || fIso < byC[n].fechaMasVieja) byC[n].fechaMasVieja = fIso;
       }
     }
   });
-  Object.keys(byC).forEach(function(k){ if (byC[k].diasMasViejo < DIAS_MIN_COBRO) delete byC[k]; });
+  // Filtrar por DIAS_MIN_COBRO (los que tienen factura más vieja >= ese mínimo)
+  Object.keys(byC).forEach(function(k){
+    if (byC[k].diasMasViejo < DIAS_MIN_COBRO) delete byC[k];
+  });
+  // Ordenar IGUAL que la pestaña Cobros:
+  //   1° por fecha de la factura más vieja (ascendente — la más antigua primero)
+  //   2° empate: por deuda total (descendente — el que más debe primero)
   var lista = Object.values(byC).sort(function(a,b){
-    if ((b.vencidas>0) !== (a.vencidas>0)) return (b.vencidas>0)?1:-1;
+    var fA = a.fechaMasVieja || '';
+    var fB = b.fechaMasVieja || '';
+    if (fA && fB) {
+      if (fA < fB) return -1;
+      if (fA > fB) return 1;
+    } else if (fA) return -1;
+    else if (fB) return 1;
     return b.deuda - a.deuda;
   });
   var hoyTxt = new Date().toLocaleDateString('es-CL');
@@ -2253,11 +2556,12 @@ function buildMsgPorCobrar() {
   if (lista.length === 0) {
     msg += '✅ Nada para cobrar hoy (mín ' + DIAS_MIN_COBRO + ' días desde la factura).';
   } else {
-    msg += '💰 Clientes con saldo a cobrar (' + lista.length + ')\nMín ' + DIAS_MIN_COBRO + ' días. Vencidos primero.\n\n';
+    msg += '💰 Clientes con saldo a cobrar (' + lista.length + ')\nOrden: factura más antigua primero (mismo orden que Cobros). Mín ' + DIAS_MIN_COBRO + ' días.\n\n';
     lista.forEach(function(c,i){
       msg += (i+1) + '. *' + c.oficial + '*';
       if (c.vencidas > 0) msg += ' ⚠️';
-      msg += '\n   ' + c.count + ' factura' + (c.count>1?'s':'');
+      msg += '\n';
+      msg += '   ' + c.count + ' factura' + (c.count>1?'s':'') + ' · más antigua ' + c.diasMasViejo + ' días';
       if (c.vencidas > 0) msg += ' · ' + c.vencidas + ' vencida' + (c.vencidas>1?'s':'');
       msg += '\n   Debe: *' + fmt(c.deuda) + '*\n\n';
     });
@@ -2266,6 +2570,7 @@ function buildMsgPorCobrar() {
   }
   return msg;
 }
+
 
 function enviarPorCobrarWhatsApp() {
   if (!WSP_RUBEN_TEL) { showToast('⚠️ Falta WhatsApp de Rubén'); return; }
@@ -2314,7 +2619,11 @@ function guardar() {
   }
   var btn = document.getElementById('btn-guardar');
   btn.disabled = true; btn.textContent = 'Guardando...';
+  // Generar ID local para idempotencia: si el fetch falla pero Sheets lo guardó,
+  // el retry con mismo id evita duplicados (requiere Apps Script v6+).
+  var localId = 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
   var params = {action:'addVenta',
+    id: localId,
     fecha:document.getElementById('n-fecha').value||hoy(),
     cliente:cli, vendedor:document.getElementById('n-vendedor').value||'',
     talon:document.getElementById('n-talon').value||'',
@@ -2324,17 +2633,27 @@ function guardar() {
     l500:v.l500, l900:v.l900, l18:v.l18,
     m500:v.m500, m900:v.m900, m18:v.m18, total:total};
   apiGet(params).then(function(res) {
-    if (res.ok && abonoData) {
-      return syncAddAbono(res.id, abonoData).then(function(){ return cargarTodo(); });
+    if (res && res.ok && abonoData) {
+      return syncAddAbono(res.id || localId, abonoData).then(function(){ return cargarTodo(); });
     }
     return cargarTodo();
   }).then(function(){
-    showToast('Venta guardada correctamente');
+    showToast('✅ Venta guardada correctamente');
     limpiar();
     btn.disabled = false; btn.textContent = 'Guardar venta';
   }).catch(function(e){
-    showToast('Error: '+e.message);
-    btn.disabled = false; btn.textContent = 'Guardar venta';
+    // ⚠️ IMPORTANTE: si falla, la venta PUEDE haberse guardado igual en Sheets.
+    // Verificar antes de reintentar.
+    var msg = '⚠️ ERROR DE CONEXIÓN\n\n' +
+      'Mensaje: ' + (e.message||e) + '\n\n' +
+      'IMPORTANTE: la venta PUEDE haberse guardado igual en Google Sheets aunque te muestre este error.\n\n' +
+      '👉 ANTES de reintentar:\n' +
+      '1. Andá a la pestaña Ventas\n' +
+      '2. Verificá si la venta ya aparece (cliente: ' + cli + ', total: ' + fmt(total) + ')\n' +
+      '3. Si YA aparece → NO reintentes (ya está)\n' +
+      '4. Si NO aparece → podés reintentar tocando Guardar';
+    alert(msg);
+    btn.disabled = false; btn.textContent = 'Guardar venta (reintentar)';
   });
 }
 
@@ -2353,18 +2672,7 @@ function limpiar() {
   document.getElementById('n-mpago-abono').value='TRANSFERENCIA';
   document.getElementById('n-dias-credito').value='';
   document.getElementById('n-dias-credito2').value='';
-  (function(){
-  if (!creditosAprobados) creditosAprobados = [];
-  for (var i=0; i<clientes.length; i++) {
-    var c = clientes[i];
-    if (c && c.creditoAprobado && c.nombre) {
-      var n = noficial(c.nombre);
-      if (creditosAprobados.indexOf(n) === -1) creditosAprobados.push(n);
-    }
-  }
-  localStorage.setItem('papelon_credito_aprobado', JSON.stringify(creditosAprobados));
-})();
-document.getElementById('n-fecha').value=hoy();
+  document.getElementById('n-fecha').value=hoy();
   document.getElementById('n-fecha-pago').value=hoy();
   document.getElementById('n-fecha-abono').value=hoy();
   setTab('pagado');
@@ -4153,6 +4461,86 @@ function guardarPreciosBase(){
   syncSetConfig({precios: precios});
   if (!precioEspActivo) aplicarPreciosBase();
   showToast('✅ Precios base actualizados y sincronizados');
+}
+
+function detectarDuplicadosVentas() {
+  // Criterio principal: MISMO N° DE BOLETA (talon) → duplicado seguro
+  // Fallback: ventas sin talon → mismo cliente + fecha + total
+  var grupos = {};
+  ventas.forEach(function(v){
+    var talon = String(v.talon||'').trim();
+    var k;
+    if (talon) {
+      // Por boleta — agregamos cliente por si dos negocios usan numeración separada
+      k = 'BOL|' + talon + '|' + noficial(v.cliente);
+    } else {
+      // Sin boleta → fallback a cliente+fecha+total
+      k = 'SIN|' + noficial(v.cliente) + '|' + (v.fecha||'') + '|' + (Number(v.total)||0);
+    }
+    if (!grupos[k]) grupos[k] = [];
+    grupos[k].push(v);
+  });
+  var dupGroups = [];
+  Object.keys(grupos).forEach(function(k){
+    if (grupos[k].length > 1) {
+      dupGroups.push({
+        key: k,
+        criterio: k.startsWith('BOL|') ? 'boleta' : 'cliente+fecha+total',
+        ventas: grupos[k]
+      });
+    }
+  });
+  return dupGroups;
+}
+
+function eliminarDuplicadosVentas() {
+  var dups = detectarDuplicadosVentas();
+  if (!dups.length) {
+    alert('✅ No se detectaron ventas duplicadas.\n\n(Criterio: mismo cliente + misma fecha + mismo total)');
+    return;
+  }
+  var totalDuplicadas = dups.reduce(function(s,g){return s + (g.ventas.length - 1);}, 0);
+  var resumen = dups.slice(0, 10).map(function(g){
+    var v = g.ventas[0];
+    var por = g.criterio === 'boleta' ? '[Boleta '+(v.talon||'?')+']' : '[sin boleta]';
+    return '• '+por+' '+noficial(v.cliente)+' · '+fmtF(v.fecha)+' · '+fmt(v.total)+' ('+g.ventas.length+' copias)';
+  }).join('\n');
+  if (dups.length > 10) resumen += '\n... y '+(dups.length-10)+' más';
+  if (!confirm('🔍 DUPLICADOS DETECTADOS\n\n'+dups.length+' grupos con duplicados ('+totalDuplicadas+' ventas a borrar)\n\nMuestra:\n'+resumen+'\n\n¿Borrar las copias extra? (Se mantiene la más antigua de cada grupo)\n\n⚠️ Esta acción NO se puede deshacer.')) return;
+  // Borrar las copias extra de cada grupo (mantener la primera por createdAt o índice)
+  var aBorrar = [];
+  dups.forEach(function(g){
+    // Ordenar por createdAt o por orden de aparición
+    g.ventas.sort(function(a,b){
+      var ca = a.createdAt||''; var cb = b.createdAt||'';
+      if (ca < cb) return -1; if (ca > cb) return 1; return 0;
+    });
+    // Mantener la primera, borrar el resto
+    for (var i=1; i<g.ventas.length; i++) aBorrar.push(g.ventas[i]);
+  });
+  showToast('Borrando '+aBorrar.length+' duplicadas...');
+  var promises = aBorrar.map(function(v){
+    // Borrar local
+    var idx = ventas.findIndex(function(x){return x.id === v.id;});
+    if (idx >= 0) ventas.splice(idx, 1);
+    if (abonos[v.id]) delete abonos[v.id];
+    // Borrar remoto
+    if (SCRIPT_URL && v.id) {
+      return apiGet({action:'deleteVenta', id:v.id}).then(function(){
+        return apiGet({action:'deleteAbonosVenta', ventaId:v.id});
+      }).catch(function(){});
+    }
+    return Promise.resolve();
+  });
+  localStorage.setItem('papelon_abonos', JSON.stringify(abonos));
+  Promise.all(promises).then(function(){
+    return cargarTodo();
+  }).then(function(){
+    renderT(); rPanel(); rCobros();
+    alert('✅ '+aBorrar.length+' ventas duplicadas eliminadas.');
+  }).catch(function(err){
+    alert('⚠️ Error al limpiar: '+(err.message||err)+'. Recargá la página.');
+  });
 }
 
 function guardarConfig(){var url=document.getElementById('cfg-url').value.trim();if(!url||!url.startsWith('https://script.google.com')){showToast('URL inválida');return;}SCRIPT_URL=url;localStorage.setItem('papelon_url',url);showToast('Guardado. Cargando...');cargarVentas().then(function(){rConfig();rPanel();});}
