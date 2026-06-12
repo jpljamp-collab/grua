@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conciliación Innovare</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#075E54">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f0f2f5;color:#111b21;padding:14px;max-width:1000px;margin:0 auto}
+h1{font-size:20px}h1 .b{color:#075E54}
+.sub{color:#667781;font-size:13px;margin-bottom:12px}
+.panel{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.panel h2{font-size:14px;margin-bottom:10px}
+.drop{border:2px dashed #c4cdd4;border-radius:10px;padding:18px;text-align:center;color:#667781;font-size:13px;cursor:pointer}
+.drop:hover,.drop.over{border-color:#25d366;background:#f3fbf5;color:#0a6e2e}
+.drop b{color:#111b21}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fld{display:flex;flex-direction:column;gap:3px}label{font-size:12px;color:#667781}
+input,select{padding:8px 10px;border:1px solid #d1d7db;border-radius:8px;font-size:13px;font-family:inherit}
+button{border:none;border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600;cursor:pointer}
+.primary{background:#0a66c2;color:#fff}.green{background:#25d366;color:#fff}.ghost{background:#f1f3f4;color:#444}.del{background:#fdeaea;color:#c62828;padding:6px 9px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:#fff;border-radius:10px;padding:10px 14px;box-shadow:0 1px 2px rgba(0,0,0,.08);flex:1;min-width:140px}
+.stat .n{font-size:18px;font-weight:700}.stat .l{font-size:11px;color:#667781;text-transform:uppercase;letter-spacing:.4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px;text-align:left;border-bottom:1px solid #eceff1;vertical-align:middle}
+th{font-size:11px;text-transform:uppercase;color:#667781}
+.bankhd{background:#f6f8fa;font-weight:700}
+.subtotal td{font-weight:700;border-top:2px solid #d0d7de;background:#fbfdff}
+.amt{text-align:right;white-space:nowrap;font-weight:600}
+.estado{cursor:pointer;font-size:12px;padding:3px 8px;border-radius:6px;border:none;font-weight:600}
+.ok{background:#e6f7ec;color:#0f8a43}.val{background:#fff4e0;color:#b58100}
+.daybar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.msg{font-size:13px;padding:8px 10px;border-radius:8px;margin-top:8px}
+.msg.work{background:#fff4e0;color:#8a6100}.msg.okk{background:#e6f7ec;color:#0f8a43}.msg.err{background:#fdeaea;color:#c62828}
+.cfg{font-size:12px;color:#0a66c2;cursor:pointer}
+#setup input{width:100%;margin-top:6px}
+.hidden{display:none}
+</style></head><body>
+
+<h1>🏦 Conciliación <span class="b">Innovare</span></h1>
+<div class="sub">Comparte o sube los comprobantes. Se leen solos y quedan en tu Google Sheet, sincronizados entre teléfono y computador. <span class="cfg" onclick="toggleSetup()">⚙️ Configurar</span></div>
+
+<div id="setup" class="panel hidden">
+  <h2>Conexión con tu Google Sheet</h2>
+  <label>Pega aquí la URL de tu backend (la que termina en /exec):</label>
+  <input id="backendUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec">
+  <div class="row" style="margin-top:8px"><button class="primary" onclick="saveBackend()">Guardar conexión</button> <button class="ghost" onclick="loadList()">Probar / recargar</button></div>
+  <div class="sub" style="margin-top:8px;margin-bottom:0">Sin esta URL la app no puede guardar. Sigue la guía para obtenerla. No contiene claves: es seguro.</div>
+</div>
+
+<div class="panel">
+  <h2>➕ Cargar comprobantes</h2>
+  <div id="drop" class="drop"><b>Arrastra o toca aquí</b> para subir las capturas (varias a la vez).<br><span class="sub">En el teléfono también puedes usar "Compartir" desde WhatsApp.</span></div>
+  <input id="file" type="file" accept="image/*" multiple class="hidden">
+  <div id="msg"></div>
+</div>
+
+<div class="panel">
+  <h2>✍️ Agregar manual</h2>
+  <div class="row">
+    <div class="fld"><label>Hora</label><input id="mHora" placeholder="14:35" style="width:74px"></div>
+    <div class="fld"><label>Pagador</label><input id="mPag" placeholder="Cliente"></div>
+    <div class="fld"><label>Monto</label><input id="mMonto" placeholder="46305" style="width:100px"></div>
+    <div class="fld"><label>Banco</label><select id="mBanco"><option>Santander</option><option>Banco de Chile</option></select></div>
+    <div class="fld"><label>N° Factura</label><input id="mFact" placeholder="1402" style="width:84px"></div>
+    <div class="fld"><label>&nbsp;</label><button class="primary" onclick="addManual()">Agregar</button></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="daybar">
+    <h2 style="margin:0">Pagos</h2>
+    <label>Fecha:</label><input id="dayPick" type="date">
+    <label><input id="allDays" type="checkbox"> ver todos</label>
+    <button class="ghost" onclick="loadList()">🔄 Recargar</button>
+    <button class="ghost" onclick="exportCSV()">⬇️ CSV</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div id="table"></div>
+</div>
+
+<script>
+const BANCOS=["Santander","Banco de Chile"];
+let BACKEND=localStorage.getItem("innovare_backend")||"";
+let ROWS=[];
+const fmtCLP=n=>"$"+(parseInt(n)||0).toLocaleString("es-CL");
+const pad=n=>String(n).padStart(2,"0");
+function todayStr(){const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function isoFromDMY(s){const m=String(s||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);if(!m)return"";let y=+m[3];if(y<100)y+=2000;return y+"-"+pad(+m[2])+"-"+pad(+m[1]);}
+function msg(t,k){const m=document.getElementById("msg");m.textContent=t;m.className="msg "+(k||"work");}
+
+function toggleSetup(){document.getElementById("setup").classList.toggle("hidden");document.getElementById("backendUrl").value=BACKEND;}
+function saveBackend(){BACKEND=document.getElementById("backendUrl").value.trim();localStorage.setItem("innovare_backend",BACKEND);loadList();}
+
+async function api(payload){
+  if(!BACKEND){msg("Falta conectar la Google Sheet. Toca ⚙️ Configurar.","err");throw new Error("no backend");}
+  const res=await fetch(BACKEND,{method:"POST",body:JSON.stringify(payload)});
+  return res.json();
+}
+async function loadList(){
+  if(!BACKEND){document.getElementById("setup").classList.remove("hidden");return;}
+  try{const res=await fetch(BACKEND+"?t="+Date.now());const j=await res.json();ROWS=j.rows||[];render();}
+  catch(e){msg("No pude conectar con la Sheet. Revisa la URL en ⚙️ Configurar.","err");}
+}
+
+function fileToB64(file){return new Promise((ok)=>{const r=new FileReader();r.onload=()=>ok(r.result.split(",")[1]);r.readAsDataURL(file);});}
+
+async function processImages(files){
+  let done=0;
+  for(const f of files){
+    msg("Leyendo comprobante "+(done+1)+" de "+files.length+"…","work");
+    try{const b64=await fileToB64(f);await api({action:"add",image:b64,mime:f.type||"image/jpeg"});done++;}
+    catch(e){}
+  }
+  msg(done+" comprobante(s) cargado(s) ✓","okk");
+  await loadList();
+  setTimeout(()=>{const m=document.getElementById("msg");m.textContent="";m.className="";},4000);
+}
+
+async function addManual(){
+  const monto=(document.getElementById("mMonto").value||"").replace(/[^0-9]/g,"");
+  const pag=document.getElementById("mPag").value.trim();
+  if(!monto&&!pag){alert("Ingresa monto o pagador.");return;}
+  const today=todayStr().split("-").reverse().join("/");
+  await api({action:"add",fecha:today,hora:document.getElementById("mHora").value.trim(),pagador:pag,monto:monto,banco:document.getElementById("mBanco").value,nfact:document.getElementById("mFact").value.trim()});
+  ["mHora","mPag","mMonto","mFact"].forEach(id=>document.getElementById(id).value="");
+  loadList();
+}
+
+const COL={fecha:1,hora:2,pagador:3,rut:4,monto:5,banco:6,nop:7,nfact:8,estado:9,tel:10};
+async function editCell(id,field,value){await api({action:"update",id:id,col:COL[field],value:value});const r=ROWS.find(x=>x.id===id);if(r)r[field]=value;render();}
+async function toggleEstado(id){const r=ROWS.find(x=>x.id===id);const nv=r.estado==="Conciliado"?"Por validar":"Conciliado";await api({action:"update",id:id,col:COL.estado,value:nv});r.estado=nv;render();}
+async function delRow(id){if(!confirm("¿Borrar este pago?"))return;await api({action:"delete",id:id});loadList();}
+
+function render(){
+  const all=document.getElementById("allDays").checked;
+  const day=document.getElementById("dayPick").value;
+  let rows=ROWS.filter(r=>all|| isoFromDMY(r.fecha)===day || (!isoFromDMY(r.fecha)&&!r.fecha));
+  rows.sort((a,b)=>String(a.hora||"99").localeCompare(String(b.hora||"99")));
+  let total=0,porVal=0;const perBank={};BANCOS.forEach(b=>perBank[b]=0);
+  rows.forEach(r=>{const m=parseInt(r.monto)||0;total+=m;if(r.estado!=="Conciliado")porVal+=m;if(perBank[r.banco]==null)perBank[r.banco]=0;perBank[r.banco]+=m;});
+  document.getElementById("stats").innerHTML=
+    `<div class="stat"><div class="n">${fmtCLP(total)}</div><div class="l">Total (${rows.length} pagos)</div></div>`+
+    BANCOS.map(b=>`<div class="stat"><div class="n">${fmtCLP(perBank[b]||0)}</div><div class="l">${b}</div></div>`).join("")+
+    `<div class="stat"><div class="n" style="color:#b58100">${fmtCLP(porVal)}</div><div class="l">Por validar</div></div>`;
+  const T=document.getElementById("table");
+  if(!rows.length){T.innerHTML='<div class="sub" style="margin:0">Sin pagos para mostrar. Sube un comprobante o cambia la fecha.</div>';return;}
+  let html='<table><thead><tr><th>Hora</th><th>Pagador</th><th class="amt">Monto</th><th>N° Fact.</th><th>Estado</th><th></th></tr></thead><tbody>';
+  const banks=[...BANCOS,...Object.keys(perBank).filter(b=>!BANCOS.includes(b))];
+  banks.forEach(bank=>{const rs=rows.filter(r=>r.banco===bank);if(!rs.length)return;
+    html+=`<tr class="bankhd"><td colspan="6">🏦 ${bank} — ${fmtCLP(perBank[bank])}</td></tr>`;
+    rs.forEach(r=>{html+=`<tr>
+      <td><input value="${r.hora||""}" style="width:60px" onchange="editCell(${r.id},'hora',this.value)"></td>
+      <td><input value="${(r.pagador||"").replace(/"/g,'&quot;')}" style="width:100%" onchange="editCell(${r.id},'pagador',this.value)"></td>
+      <td class="amt"><input value="${r.monto||""}" style="width:84px;text-align:right" onchange="editCell(${r.id},'monto',this.value.replace(/[^0-9]/g,''))"></td>
+      <td><input value="${r.nfact||""}" style="width:66px" onchange="editCell(${r.id},'nfact',this.value)"></td>
+      <td><button class="estado ${r.estado==='Conciliado'?'ok':'val'}" onclick="toggleEstado(${r.id})">${r.estado==='Conciliado'?'✅':'⚠️'} ${r.estado||'Por validar'}</button></td>
+      <td><button class="del" onclick="delRow(${r.id})">✕</button></td></tr>`;});
+  });
+  html+=`<tr class="subtotal"><td colspan="2">TOTAL</td><td class="amt">${fmtCLP(total)}</td><td colspan="3"></td></tr></tbody></table>`;
+  T.innerHTML=html;
+}
+
+function exportCSV(){
+  const all=document.getElementById("allDays").checked;const day=document.getElementById("dayPick").value;
+  let rows=ROWS.filter(r=>all||isoFromDMY(r.fecha)===day).sort((a,b)=>String(a.hora||"99").localeCompare(String(b.hora||"99")));
+  if(!rows.length){alert("Nada para exportar.");return;}
+  let csv="Fecha;Hora;Pagador;RUT;Monto;Banco;N Operacion;N Factura;Estado\n";
+  rows.forEach(r=>{csv+=`${r.fecha||""};${r.hora||""};"${(r.pagador||"").replace(/"/g,'""')}";${r.rut||""};${r.monto||0};${r.banco||""};${r.nop||""};${r.nfact||""};${r.estado||""}\n`;});
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));a.download="Pagos_Innovare_"+(all?"todos":day)+".csv";a.click();
+}
+
+// captura por subir / arrastrar
+const drop=document.getElementById("drop"),file=document.getElementById("file");
+drop.onclick=()=>file.click();
+file.onchange=e=>{if(e.target.files.length)processImages([...e.target.files]);file.value="";};
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("over");};
+drop.ondragleave=()=>drop.classList.remove("over");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files.length)processImages([...e.dataTransfer.files]);};
+document.getElementById("dayPick").value=todayStr();
+document.getElementById("dayPick").onchange=render;
+document.getElementById("allDays").onchange=render;
+
+// imagenes compartidas desde WhatsApp (Android)
+async function checkShared(){
+  if(location.search.indexOf("shared=1")<0)return;
+  try{const c=await caches.open("innovare-v1");const cnt=await c.match("shared-count");const n=cnt?parseInt(await cnt.text()):0;
+    const files=[];for(let i=0;i<n;i++){const r=await c.match("shared-"+i);if(r){const b=await r.blob();files.push(new File([b],"comprobante"+i+".jpg",{type:b.type||"image/jpeg"}));}}
+    for(let i=0;i<n;i++){await c.delete("shared-"+i);}await c.delete("shared-count");
+    history.replaceState({},"",location.pathname);
+    if(files.length)processImages(files);
+  }catch(e){}
+}
+
+// service worker (para "compartir" e instalar)
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}
+if(!BACKEND){document.getElementById("setup").classList.remove("hidden");}
+loadList();checkShared();
+</script>
+</body></html>
