@@ -870,6 +870,7 @@ tr:hover td { background: #f0fdf4; }
           <option value="vendedor">👤 Ventas por vendedor</option>
           <option value="mpago">💳 Modos de pago</option>
           <option value="evolucion">📈 Evolución diaria de ventas</option>
+          <option value="ausentes">📵 Clientes que no compran (60+ días)</option>
         </select>
       </div>
     </div>
@@ -957,6 +958,15 @@ tr:hover td { background: #f0fdf4; }
   <div class="rep-card" id="rep-evolucion">
     <div class="rep-header"><h2>📈 Evolución diaria de ventas</h2><div class="rep-sub" id="rep-sub-evolucion"></div></div>
     <div id="rep-evolucion-content"></div>
+  </div>
+
+  <div class="rep-card" id="rep-ausentes">
+    <div class="rep-header"><h2>📵 Clientes que no compran hace meses</h2><div class="rep-sub" id="rep-sub-ausentes"></div></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap" class="no-print">
+      <button class="btn-primary" onclick="copiarListadoAusentes()" style="width:auto;padding:8px 16px">📋 Copiar listado para el vendedor</button>
+      <button class="btn-sec" onclick="exportAusentesCSV()">📥 CSV</button>
+    </div>
+    <div id="rep-ausentes-content"></div>
   </div>
 
   <div class="card" id="rep-detallado-cliente">
@@ -3711,7 +3721,7 @@ function autoDetectar(){var nombres=[...new Set(ventas.map(function(v){return v.
 // === Selector de reporte (v19.11) ===
 function cambiarReporte() {
   var tipo = document.getElementById('rep-tipo').value;
-  var ids = ['rep-resumen','rep-productos','rep-prodvsventa-card','rep-cobros','rep-topcli','rep-rankingcli','rep-pronostico','rep-vendedor','rep-mpago','rep-evolucion'];
+  var ids = ['rep-resumen','rep-productos','rep-prodvsventa-card','rep-cobros','rep-topcli','rep-rankingcli','rep-pronostico','rep-vendedor','rep-mpago','rep-evolucion','rep-ausentes'];
   ids.forEach(function(id){
     var el = document.getElementById(id);
     if (el) el.classList.remove('show');
@@ -3726,7 +3736,8 @@ function cambiarReporte() {
     'pronostico':'rep-pronostico',
     'vendedor':'rep-vendedor',
     'mpago':'rep-mpago',
-    'evolucion':'rep-evolucion'
+    'evolucion':'rep-evolucion',
+    'ausentes':'rep-ausentes'
   };
   var target = document.getElementById(mapTipo[tipo]);
   if (target) target.classList.add('show');
@@ -3741,7 +3752,8 @@ function cambiarReporte() {
     'pronostico':'Pronóstico de ventas',
     'vendedor':'Ventas por vendedor',
     'mpago':'Modos de pago',
-    'evolucion':'Evolución diaria de ventas'
+    'evolucion':'Evolución diaria de ventas',
+    'ausentes':'Clientes que no compran hace meses'
   };
   var printTit = document.getElementById('rep-print-titulo');
   if (printTit) printTit.textContent = titulos[tipo] || 'Reporte';
@@ -4087,7 +4099,128 @@ function rReportes(){
     return '<div class="bar-row"><div class="bar-label">'+fmtF(d)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(byD[d]/mxD*100)+'%"></div></div><div class="bar-val">'+fmt(byD[d])+'</div></div>';
   }).join('') : '<div style="font-size:13px;color:#aaa">Sin ventas en el período</div>';
 
+  rReportesAusentes();
   rPronostico();
+}
+
+// === Reporte: clientes que no compran hace meses (listado combinado para el vendedor) ===
+// Se calcula sobre TODO el historial de ventas, en una sola pasada.
+var _ausentesLista = []; // guarda la última lista calculada, para copiarla completa
+function rReportesAusentes(){
+  var cont = document.getElementById('rep-ausentes-content');
+  if (!cont) return;
+  var UMBRAL = 60; // días sin comprar (2 meses)
+
+  var ultimaPorCliente = {};
+  ventas.forEach(function(v){
+    var n = noficial(v.cliente);
+    var f = fechaISO(v.fecha);
+    if (!ultimaPorCliente[n]) ultimaPorCliente[n] = {fecha:'', total:0};
+    ultimaPorCliente[n].total += Number(v.total)||0;
+    if (f && f > ultimaPorCliente[n].fecha) ultimaPorCliente[n].fecha = f;
+  });
+
+  var hoyD = new Date();
+  var lista = [];
+  Object.keys(ultimaPorCliente).forEach(function(n){
+    var u = ultimaPorCliente[n];
+    if (!u.fecha) return;
+    var dias = Math.floor((hoyD - new Date(u.fecha+'T00:00:00'))/86400000);
+    if (dias >= UMBRAL) lista.push({nombre:n, dias:dias, ultima:u.fecha, totalHist:u.total});
+  });
+  lista.sort(function(a,b){return b.dias - a.dias;});
+  _ausentesLista = lista;
+
+  var sub = document.getElementById('rep-sub-ausentes');
+  if (sub) sub.textContent = lista.length + ' cliente(s) sin comprar hace ' + UMBRAL + '+ días';
+
+  if (lista.length === 0){
+    cont.innerHTML = '<div style="font-size:13px;color:#16a34a;padding:10px">✅ Ningún cliente lleva más de '+UMBRAL+' días sin comprar.</div>';
+    return;
+  }
+
+  function ficha(n){ return clientes.find(function(c){return c.nombre===n;}) || {}; }
+  function txtMeses(d){ var m=Math.floor(d/30); return m>=1 ? '~'+m+(m===1?' mes':' meses') : ''; }
+  function colorDias(d){ return d>=180 ? '#991b1b' : (d>=90 ? '#dc2626' : '#d97706'); }
+  function badgeDias(d){ var bg=colorDias(d); return '<span style="display:inline-block;background:'+bg+';color:#fff;padding:3px 9px;border-radius:11px;font-size:11px;font-weight:700;white-space:nowrap">'+d+' días · '+txtMeses(d)+'</span>'; }
+
+  var leyenda = '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#555;margin-bottom:10px">'+
+    '<span>🟠 <strong>2 meses</strong> (60 a 89 días)</span>'+
+    '<span>🔴 <strong>Más de 2 meses</strong> (90 días o más)</span></div>';
+
+  function headerGrupo(t,bg,c){ return '<tr><td colspan="7" style="background:'+bg+';color:'+c+';font-weight:800;font-size:12px;padding:7px 10px;letter-spacing:.3px">'+t+'</td></tr>'; }
+
+  var filas=''; var grupoActual=null;
+  lista.forEach(function(a){
+    var grupo = a.dias>=90 ? 'mas' : 'dos';
+    if (grupo!==grupoActual){
+      grupoActual=grupo;
+      filas += (grupo==='mas')
+        ? headerGrupo('🔴 MÁS DE 2 MESES (90 días o más)','#fef2f2','#991b1b')
+        : headerGrupo('🟠 2 MESES (60 a 89 días)','#fff7ed','#9a3412');
+    }
+    var mk = (grupo==='mas')?'🔴':'🟠';
+    var f = ficha(a.nombre); var tel = f.tel||'';
+    filas += '<tr>'+
+      '<td style="font-weight:600">'+mk+' '+a.nombre+'</td>'+
+      '<td style="font-size:11px;color:#666">'+(f.comuna||'—')+'</td>'+
+      '<td>'+(tel?'<a href="tel:'+tel+'" style="color:var(--primary);font-size:11px">'+tel+'</a>':'<span style="font-size:11px;color:#aaa">—</span>')+'</td>'+
+      '<td>'+fmtF(a.ultima)+'</td>'+
+      '<td>'+badgeDias(a.dias)+'</td>'+
+      '<td>'+fmt(a.totalHist)+'</td>'+
+      '<td>'+btnWsp(tel,'ausentes',a.nombre)+'</td>'+
+    '</tr>';
+  });
+
+  cont.innerHTML = leyenda + '<div class="tw"><table><thead><tr>'+
+      '<th>Cliente</th><th>Comuna</th><th>Tel</th><th>Última compra</th><th>Tiempo sin comprar</th><th>Total histórico</th><th>WhatsApp</th>'+
+    '</tr></thead><tbody>'+ filas +'</tbody></table></div>';
+}
+
+// Arma UN SOLO texto con todos los clientes que no compran, agrupados, para el vendedor
+function copiarListadoAusentes(){
+  var lista = _ausentesLista || [];
+  if (!lista.length){ if(typeof showToast==='function') showToast('No hay clientes en el listado'); return; }
+  function ficha(n){ return clientes.find(function(c){return c.nombre===n;}) || {}; }
+  function txtMeses(d){ var m=Math.floor(d/30); return m>=1 ? '~'+m+(m===1?' mes':' meses') : ''; }
+  var txt = 'CLIENTES QUE NO COMPRAN HACE 2+ MESES\n(generado el '+fmtF(hoy())+')\n';
+  txt += '🟠 = 2 meses   🔴 = más de 2 meses\n';
+  var grupoActual = null;
+  lista.forEach(function(a, i){
+    var grupo = a.dias>=90 ? 'mas' : 'dos';
+    if (grupo!==grupoActual){
+      grupoActual=grupo;
+      txt += (grupo==='mas') ? '\n🔴 MÁS DE 2 MESES (90 días o más)\n' : '\n🟠 2 MESES (60 a 89 días)\n';
+    }
+    var mk = (grupo==='mas')?'🔴':'🟠';
+    var f = ficha(a.nombre);
+    txt += mk+' '+(i+1)+'. '+a.nombre;
+    if (f.comuna) txt += ' — '+f.comuna;
+    txt += ' — '+a.dias+' días ('+txtMeses(a.dias)+')';
+    if (f.tel) txt += ' — Tel: '+f.tel;
+    txt += '\n';
+  });
+  txt += '\nTotal: '+lista.length+' clientes sin comprar hace 2+ meses.';
+  copiarAlPortapapeles(txt, 'Listado de clientes que no compran');
+}
+
+function exportAusentesCSV(){
+  var rows = document.querySelectorAll('#rep-ausentes-content table tbody tr');
+  if (!rows || rows.length===0){ if(typeof showToast==='function') showToast('No hay clientes para exportar'); return; }
+  var h = ['Cliente','Comuna','Tel','Última compra','Tiempo sin comprar','Total histórico'];
+  var lineas = [h.join(',')];
+  rows.forEach(function(tr){
+    var c = tr.querySelectorAll('td');
+    if (c.length < 7) return; // saltar las filas de encabezado de grupo
+    var fila = [];
+    for (var i=0;i<6;i++){ var t=c[i]?(c[i].textContent||'').replace(/"/g,'').trim():''; fila.push('"'+t+'"'); }
+    lineas.push(fila.join(','));
+  });
+  var csv = lineas.join('\n');
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);
+  a.download = 'papelon_clientes_sin_comprar_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
 }
 
 function rPronostico(){
