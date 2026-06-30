@@ -32,6 +32,8 @@ h1{font-size:20px;margin-bottom:2px}
 <div class="bar"><button id="avisar" class="avisar" disabled>📤 Avisar pagos (0)</button></div>
 <script>
 (function(){
+  var EMPRESA="Innovare";
+  var PAGO="💳 Datos para transferencia:\nGrupo Innovare 360\n77.974.821-9\nSantander\nCuenta Corriente\n0-000-372-8025-9\nAdm.grupoinnovare360@gmail.com";
   var app=document.getElementById("app"), btn=document.getElementById("avisar");
   function fail(m){app.innerHTML='<div class="tip">'+m+'</div>';btn.style.display='none';}
   if(typeof LZString==="undefined"){fail("No hay conexión para cargar la página. Revisa tu internet y vuelve a abrir el enlace.");return;}
@@ -40,46 +42,76 @@ h1{font-size:20px;margin-bottom:2px}
   var data=null;
   try{data=JSON.parse(LZString.decompressFromEncodedURIComponent(raw));}catch(e){data=null;}
   if(!data||!data.c){fail("No pude leer la lista. El enlace puede haber llegado incompleto; pídelo de nuevo.");return;}
+  function clp(n){return "$"+Math.round(n||0).toLocaleString("es-CL");}
+  var _today=new Date();_today.setHours(0,0,0,0);
+  function parseFe(s){if(!s||s==="(falta dato)")return null;var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);if(!m)return null;return new Date(+m[3],+m[2]-1,+m[1]);}
+  function ddOf(fe){var d=parseFe(fe);if(!d)return null;return Math.round((_today-d)/86400000);}
+  function buildMsg(nombre,fac){
+    var multi=fac.length>1;
+    var L=["Hola "+nombre+" 👋","Esperamos que te encuentres muy bien.","Te escribimos de "+EMPRESA+" para compartir el estado actualizado de tu cuenta, donde actualmente registramos "+(multi?"las siguientes facturas pendientes":"la siguiente factura pendiente")+":"];
+    var total=0;
+    fac.forEach(function(x){
+      var dd=ddOf(x.fe);
+      var estado="(falta vencimiento)";
+      if(dd!=null){estado=dd>0?("*"+dd+" días de vencimiento*"):(dd===0?"*vence hoy*":("*por vencer en "+(-dd)+" días*"));}
+      var ref=x.fo?("📄 Factura "+x.fo+" · "+x.fe):(x.fe&&x.fe!=="(falta dato)"?("📄 Vence "+x.fe):"📄 Documento pendiente");
+      L.push(ref);L.push("💰 "+clp(x.sa)+" · "+estado);total+=(x.sa||0);
+    });
+    L.push("━━━━━━━━━━━━━━━━━");L.push("💵 Total adeudado: *"+clp(total)+"*");L.push(PAGO);
+    L.push("Agradeceríamos nos pudieras indicar una fecha estimada de pago o enviar el comprobante una vez realizada la transferencia.");
+    L.push("Ante cualquier duda o coordinación, estamos atentos para ayudarte.");L.push("¡Muchas gracias por tu preferencia y apoyo! 🙌");L.push("Equipo "+EMPRESA);
+    return L.join("\n");
+  }
+  function fb(t,ok){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.top="0";ta.style.opacity="0";document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand("copy");ok&&ok();}catch(e){}document.body.removeChild(ta);}
+
+  // enrich clients: total, maxd, msg
+  var grand=0;
+  data.c.forEach(function(c){
+    c.fac=c.fac||[];
+    var tot=0,md=null;
+    c.fac.forEach(function(x){tot+=(x.sa||0);var dd=ddOf(x.fe);if(dd!=null){md=(md==null)?dd:Math.max(md,dd);}});
+    c._tot=tot;c._md=md;c._msg=buildMsg(c.n,c.fac);grand+=tot;
+  });
+
   var KEY="cob_pag_"+(data.v||"x");
   var paid={};try{paid=JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){}
   function savePaid(){try{localStorage.setItem(KEY,JSON.stringify(paid));}catch(e){}}
-  function fb(t,ok){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.top="0";ta.style.opacity="0";document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand("copy");ok&&ok();}catch(e){}document.body.removeChild(ta);}
+
   var head='<h1>📋 Cobranza — '+(data.v||"")+'</h1>';
-  head+='<div class="sub">'+(data.d||"")+' · '+data.c.length+' clientes · $'+Number(data.t||0).toLocaleString("es-CL")+' por cobrar</div>';
+  head+='<div class="sub">'+(data.d||"")+' · '+data.c.length+' clientes · '+clp(grand)+' por cobrar</div>';
   head+='<div class="tip">👉 <b>Toca el nombre</b> del cliente para copiar su mensaje y pegarlo en su chat.<br>💵 Cuando un cliente te mande el comprobante, toca <b>✅ Pagó</b>. Al final, toca <b>📤 Avisar pagos</b> abajo para enviárselos a administración.</div>';
   app.innerHTML=head;
 
-  function updBtn(){
-    var n=data.c.filter(function(c){return paid[c.nombre];}).length;
-    btn.textContent="📤 Avisar pagos ("+n+")";
-    btn.disabled=n===0;
-  }
+  function updBtn(){var n=data.c.filter(function(c){return paid[c.n];}).length;btn.textContent="📤 Avisar pagos ("+n+")";btn.disabled=n===0;}
+
   data.c.forEach(function(c){
+    var sem=c.s||((c._md!=null&&c._md>=60)?"red":(c._md!=null&&c._md>=1)?"yel":"green");
+    var meta=((c._md==null||c._md<0)?"Por vencer":(c._md+" días mora"))+" · "+c.fac.length+" fact.";
     var el=document.createElement("div");
-    el.className="card "+(c.sem||"")+(paid[c.nombre]?" pag":"");
-    el.innerHTML='<div class="head"><div><div class="name">'+c.nombre+' 📋</div><div class="meta">'+(c.meta||"")+'</div><div class="tap">Toca el nombre para copiar</div></div><div class="amount">$'+Number(c.total||0).toLocaleString("es-CL")+'</div></div><span class="toggle">▸ Ver mensaje</span><div class="msg" style="display:none"></div><div class="acts"><button class="b bpag">'+(paid[c.nombre]?"✓ Pagado":"✅ Pagó")+'</button></div>';
-    el.querySelector(".msg").textContent=c.msg||"";
+    el.className="card "+sem+(paid[c.n]?" pag":"");
+    el.innerHTML='<div class="head"><div><div class="name">'+c.n+' 📋</div><div class="meta">'+meta+'</div><div class="tap">Toca el nombre para copiar</div></div><div class="amount">'+clp(c._tot)+'</div></div><span class="toggle">▸ Ver mensaje</span><div class="msg" style="display:none"></div><div class="acts"><button class="b bpag">'+(paid[c.n]?"✓ Pagado":"✅ Pagó")+'</button></div>';
+    el.querySelector(".msg").textContent=c._msg;
     el.querySelector(".toggle").onclick=function(){var m=el.querySelector(".msg");var sh=m.style.display==="none";m.style.display=sh?"block":"none";this.textContent=sh?"▾ Ocultar mensaje":"▸ Ver mensaje";};
     var nm=el.querySelector(".name");
     function flash(){var o=nm.textContent;nm.textContent="✓ Copiado";nm.style.color="#0f8a43";setTimeout(function(){nm.textContent=o;nm.style.color="";},1300);}
-    nm.onclick=function(){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c.msg||"").then(flash,function(){fb(c.msg||"",flash);});}else{fb(c.msg||"",flash);}};
+    nm.onclick=function(){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c._msg).then(flash,function(){fb(c._msg,flash);});}else{fb(c._msg,flash);}};
     var pb=el.querySelector(".bpag");
-    pb.onclick=function(){if(paid[c.nombre]){delete paid[c.nombre];el.classList.remove("pag");pb.textContent="✅ Pagó";}else{paid[c.nombre]=c.total||1;el.classList.add("pag");pb.textContent="✓ Pagado";}savePaid();updBtn();};
+    pb.onclick=function(){if(paid[c.n]){delete paid[c.n];el.classList.remove("pag");pb.textContent="✅ Pagó";}else{paid[c.n]=c._tot||1;el.classList.add("pag");pb.textContent="✓ Pagado";}savePaid();updBtn();};
     app.appendChild(el);
   });
   updBtn();
 
   btn.onclick=function(){
-    var pagados=data.c.filter(function(c){return paid[c.nombre];});
+    var pagados=data.c.filter(function(c){return paid[c.n];});
     if(!pagados.length)return;
-    var tot=pagados.reduce(function(s,c){return s+(c.total||0);},0);
-    var L=["✅ *Pagos recibidos — "+(data.v||"")+"*",(data.d||"")+" · "+pagados.length+" clientes · $"+Number(tot).toLocaleString("es-CL"),""];
-    pagados.forEach(function(c){L.push("• "+c.nombre+" — $"+Number(c.total||0).toLocaleString("es-CL"));});
+    var tot=pagados.reduce(function(s,c){return s+(c._tot||0);},0);
+    var L=["✅ *Pagos recibidos — "+(data.v||"")+"*",(data.d||"")+" · "+pagados.length+" clientes · "+clp(tot),""];
+    pagados.forEach(function(c){L.push("• "+c.n+" — "+clp(c._tot));});
     L.push("");L.push("(Te reenvío los comprobantes en este chat 📎)");
     var txt=L.join("\n");
     var admin=(data.admin||"").replace(/[^0-9]/g,"");
     if(admin){location.href="https://wa.me/"+admin+"?text="+encodeURIComponent(txt);}
-    else{ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){alert("Lista de pagos copiada. Pégasela a tu administrador por WhatsApp.");},function(){fb(txt,function(){alert("Lista de pagos copiada. Pégasela a tu administrador.");});});}else{fb(txt,function(){alert("Lista de pagos copiada.");});} }
+    else{ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){alert("Lista de pagos copiada. Pégasela a tu administrador por WhatsApp.");},function(){fb(txt,function(){alert("Lista de pagos copiada.");});});}else{fb(txt,function(){alert("Lista de pagos copiada.");});} }
   };
 })();
 </script>
